@@ -1,0 +1,12 @@
+<launch>
+  
+  
+  <!-- <arg name="odometry_topic" default="$(arg robot_name)/ground_truth/odometry_throttled"/> -->
+
+
+
+
+  <node pkg="offboard_ctrl" type="offboard_ctrl" name="offboard_ctrl" output="screen"></node>
+  
+ 
+</launch>
