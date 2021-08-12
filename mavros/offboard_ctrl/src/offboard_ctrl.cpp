@@ -452,49 +452,52 @@ void OffboardFSM::multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTraj
 //     waypoints.points.push_back(msg->points[i]);
 //     }
  //  
-    int lookahead_idx = 3;
-    float min_dist = 0;
-    float min_idx = 1;    
-// if size is greather than lookhaed idx, Find the closest point from current position and propogate only the points foreahead.  
-    if (msg->points.size() > lookahead_idx){        
-        for (int i=1; i < msg->points.size();i++){                    
-            float tmp_dist = hypot(hypot(msg->points[i].transforms[0].translation.x-current_pose.position.x,
-                                        msg->points[i].transforms[0].translation.y-current_pose.position.y),
-                                msg->points[i].transforms[0].translation.z-current_pose.position.z);
-                if(tmp_dist <= min_dist){
-                    min_dist = tmp_dist;
-                    min_idx = i;
-                }                 
-        }     
-        if (min_idx +lookahead_idx > msg->points.size()){
-            min_idx = 1;
-        }else{
-            min_idx += lookahead_idx;
-        }
+if (msg->points.size() > 1){  
+        int lookahead_idx = 3;
+        float min_dist = 0;
+        float min_idx = 1;    
+    // if size is greather than lookhaed idx, Find the closest point from current position and propogate only the points foreahead.  
+        if (msg->points.size() > lookahead_idx){        
+            for (int i=1; i < msg->points.size();i++){                    
+                float tmp_dist = hypot(hypot(msg->points[i].transforms[0].translation.x-current_pose.position.x,
+                                            msg->points[i].transforms[0].translation.y-current_pose.position.y),
+                                    msg->points[i].transforms[0].translation.z-current_pose.position.z);
+                    if(tmp_dist <= min_dist){
+                        min_dist = tmp_dist;
+                        min_idx = i;
+                    }                 
+            }     
+            if (min_idx +lookahead_idx > msg->points.size()){
+                min_idx = 1;
+            }else{
+                min_idx += lookahead_idx;
+            }
+        }    
+        waypoint_iter_timer_.stop();
+        waypoints.points.clear();
+        command_waiting_times_.clear();
+    //Replace trajectory starting from lookaheaded points
+    for (int i=min_idx-1;i < msg->points.size(); i++){
+            waypoints.points.push_back(msg->points[i]);
     }
- 
-    waypoint_iter_timer_.stop();
-    waypoints.points.clear();
-    command_waiting_times_.clear();
+            
+        //   waypoints.points = msg->points;    
+            // ROS_INFO("Trjectory length = %d",msg->points.size());
+            waypoints_itr = 0; 
 
-  if (msg->points.size() > 1){          
-      waypoints.points = msg->points;    
-        // ROS_INFO("Trjectory length = %d",msg->points.size());
-    waypoints_itr = 0; 
-
-    ROS_INFO("trejactory size = %d", msg->points.size());
-    ROS_INFO("the closest point + lookahead at trajectory index %d", min_idx);
-    for (int i=min_idx ; i < msg->points.size(); i++){      
-        command_waiting_times_.push_back(msg->points[i].time_from_start  - msg->points[i-1].time_from_start);
-        ROS_INFO("push time = %lf",double((msg->points[i].time_from_start  - msg->points[i-1].time_from_start).toSec()));
+            ROS_INFO("trejactory size = %d", msg->points.size());
+            ROS_INFO("the closest point + lookahead at trajectory index %d", min_idx);
+            for (int i=1 ; i < msg->points.size(); i++){      
+                command_waiting_times_.push_back(msg->points[i].time_from_start  - msg->points[i-1].time_from_start);
+                ROS_INFO("push time = %lf",double((msg->points[i].time_from_start  - msg->points[i-1].time_from_start).toSec()));
+            }
+            waypoint_iter_timer_.setPeriod(command_waiting_times_.front());
+            command_waiting_times_.pop_front();
+            waypoint_iter_timer_.start();
     }
-    waypoint_iter_timer_.setPeriod(command_waiting_times_.front());
-    command_waiting_times_.pop_front();
-    waypoint_iter_timer_.start();
-  }
-  else{
-       ROS_WARN_STREAM("Got MultiDOFJointTrajectory message, but message has no points.");
-  }
+    else{
+        ROS_WARN_STREAM("Got MultiDOFJointTrajectory message, but message has no points.");
+    }
   
 }
 
