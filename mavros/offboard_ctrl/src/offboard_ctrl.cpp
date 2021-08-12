@@ -454,7 +454,7 @@ void OffboardFSM::multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTraj
  //  
     int lookahead_idx = 3;
     float min_dist = 0;
-    float min_idx = 0;    
+    float min_idx = 1;    
 // if size is greather than lookhaed idx, Find the closest point from current position and propogate only the points foreahead.  
     if (msg->points.size() > lookahead_idx){        
         for (int i=1; i < msg->points.size();i++){                    
@@ -467,7 +467,7 @@ void OffboardFSM::multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTraj
                 }                 
         }     
         if (min_idx +lookahead_idx > msg->points.size()){
-            min_idx = 0;
+            min_idx = 1;
         }else{
             min_idx += lookahead_idx;
         }
