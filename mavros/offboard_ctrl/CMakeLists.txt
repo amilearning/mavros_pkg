@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf2_eigen
   tf2_ros
+  tf2_sensor_msgs
   quadrotor_msgs  
   mav_msgs
   mavros

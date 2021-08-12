@@ -5,6 +5,7 @@
 
 #include <tf/LinearMath/Matrix3x3.h>
 #include <tf/transform_datatypes.h>
+#include <tf/transform_listener.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/Transform.h>
@@ -24,6 +25,12 @@
 #include <mav_msgs/default_topics.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2/convert.h>
+#include <tf2_ros/buffer.h>
+#include <tf2/transform_datatypes.h>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+
 #include <geometry_msgs/TransformStamped.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <trajectory_msgs/MultiDOFJointTrajectoryPoint.h>
@@ -33,7 +40,7 @@
 #include <darknet_ros_msgs/BoundingBoxes.h>
 #include <quadrotor_msgs/PositionCommand.h>
 
-
+#include <sensor_msgs/PointCloud2.h>
 
 
 #include <planner_msgs/pci_global.h>
@@ -53,12 +60,19 @@ private:
     ros::ServiceClient set_mode_client;
 
     ros::Subscriber multiDOFJointSub;
-    ros::Subscriber odom_sub;     
+    ros::Subscriber odom_sub;   
+    // ros::Subscriber vision_odom_sub;
     ros::Subscriber state_sub;
     ros::Subscriber lidar_sub;
     ros::Subscriber mpcCommand_sub;
     ros::Subscriber bbx_sub; 
     ros::Subscriber pos_cmd_sub;
+
+    ros::Subscriber points_sub;
+    tf2_ros::Buffer tfBuffer;      
+   
+ 
+    sensor_msgs::PointCloud2 cloud_in, cloud_out;
 
     ros::Timer cmdloop_timer_;
     ros::Timer waypoint_iter_timer_; 
@@ -72,6 +86,8 @@ private:
     ros::Publisher local_pos_pub;
     ros::Publisher mpc_cmd_pub;
     ros::Publisher manual_trj_pub;
+    ros::Publisher vis_pos_pub;
+    ros::Publisher camera_points_pub;
     
     quadrotor_msgs::PositionCommand pose_cmd;
     mav_msgs::RollPitchYawrateThrust mpc_cmd;
@@ -83,6 +99,7 @@ private:
     mavros_msgs::PositionTarget pose_target_;
     bool pose_cmd_enable;
     geometry_msgs::Pose current_pose;
+    geometry_msgs::PoseStamped vis_pose;
     double current_yaw; 
     double yaw_scale = 1.0;
     double thrust_scale = 0.01;
@@ -118,6 +135,7 @@ private:
     void mpcCommandCallback(const mav_msgs::RollPitchYawrateThrustConstPtr &msg);
     void sendManualTrajectory();
     void poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg);
+    void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg);
 
 
     // sensors callback
@@ -127,6 +145,7 @@ private:
 
 
     void odom_cb(const nav_msgs::OdometryConstPtr& msg);
+    // void visCallback(const nav_msgs::OdometryConstPtr& msg);    
     void state_cb(const mavros_msgs::State::ConstPtr& msg);
     void check_drone_status();
     void local_avoidance();

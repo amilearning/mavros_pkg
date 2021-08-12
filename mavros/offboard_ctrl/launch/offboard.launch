@@ -6,7 +6,12 @@
 
 
 
-  <node pkg="offboard_ctrl" type="offboard_ctrl" name="offboard_ctrl" output="screen"></node>
+  <node pkg="offboard_ctrl" type="offboard_ctrl" name="offboard_ctrl" output="screen">
+     <remap from="/mavros/vision_pose/pose" to="/vision_pose/pose"/>  
+    <remap from="ground_truth_pose" to="/mavros/local_position/odom"/>  
+     
+  </node>
+
+  <node pkg="tf" type="static_transform_publisher" name="cam_offboard_link_broadcaster" args="0 0 0 0.0 -1.5707963 1.5707963 camera_link cam_points 100"/>
   
- 
 </launch>
