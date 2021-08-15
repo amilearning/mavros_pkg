@@ -10,3 +10,5 @@ float32 vel_max
 int32 id
 -------
 bool success
+float32[3] target_pose
+bool path_empty
