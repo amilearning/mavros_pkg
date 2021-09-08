@@ -8,6 +8,7 @@
 #include <tf/transform_listener.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Quaternion.h>
+#include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Transform.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
@@ -30,6 +31,8 @@
 #include <tf2_ros/buffer.h>
 #include <tf2/transform_datatypes.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+#include <tf/transform_broadcaster.h>
+
 
 #include <geometry_msgs/TransformStamped.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
@@ -130,7 +133,7 @@ private:
 
     ros::Subscriber multiDOFJointSub;
     ros::Subscriber odom_sub;   
-    // ros::Subscriber vision_odom_sub;
+    ros::Subscriber vision_odom_sub;
     ros::Subscriber state_sub;
     ros::Subscriber lidar_sub;
     ros::Subscriber mpcCommand_sub;
@@ -140,7 +143,15 @@ private:
     ros::Subscriber points_sub;
     tf2_ros::Buffer tfBuffer;      
    
- 
+    tf::TransformBroadcaster tf_broadcaster;
+    tf::TransformListener tf_listener_;
+    tf::StampedTransform cam_to_world;
+    tf::Transform cam_to_world_tf;
+    tf::Transform cam_to_base_link;
+    geometry_msgs::TransformStamped transformStamped_tmp;
+    tf2_ros::TransformBroadcaster tf_broadcaster_;
+
+
     sensor_msgs::PointCloud2 cloud_in, cloud_out;
 
     ros::Timer fsm_timer_;
@@ -172,7 +183,8 @@ private:
     geometry_msgs::Pose target_pose;
     geometry_msgs::Pose global_planner_target_pose;
     geometry_msgs::Pose previous_pose;
-    geometry_msgs::PoseStamped vis_pose;
+    geometry_msgs::TransformStamped vis_pose;
+    
     double current_yaw; 
     double yaw_scale = 1.0;
     double thrust_scale = 0.01;
@@ -251,7 +263,7 @@ private:
     
     
     void odom_cb(const nav_msgs::OdometryConstPtr& msg);
-    // void visCallback(const nav_msgs::OdometryConstPtr& msg);    
+    void visCallback(const geometry_msgs::PoseStampedConstPtr& msg);    
     void state_cb(const mavros_msgs::State::ConstPtr& msg);
     void check_drone_status();
     void local_avoidance();

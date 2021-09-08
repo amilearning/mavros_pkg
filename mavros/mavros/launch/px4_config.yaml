@@ -149,9 +149,9 @@ distance_sensor:
     send_tf: true
     sensor_position: {x:  0.0, y:  0.0, z:  -0.1}
   lidarlite_pub:
-    id: 1
+    id: 17
     frame_id: "lidarlite_laser"
-    orientation: PITCH_270
+    orientation: NONE
     field_of_view: 0.0  # XXX TODO
     send_tf: true
     sensor_position: {x:  0.0, y:  0.0, z:  -0.1}

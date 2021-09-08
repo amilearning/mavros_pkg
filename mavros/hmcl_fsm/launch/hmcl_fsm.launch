@@ -7,13 +7,16 @@
    <arg name="hmclFSM_config_file" default="$(find hmcl_fsm)/config/hmclFSM.yaml"/>
 
   <node pkg="hmcl_fsm" type="hmcl_fsm" name="hmcl_fsm" output="screen">
-    <remap from="/mavros/vision_pose/pose" to="/vision_pose/pose"/>  
-    <remap from="ground_truth_pose" to="/mavros/local_position/odom"/>  
+    <!-- <remap from="/mavros/vision_pose/pose" to="vins/vision_pose/pose"/>   -->
+      <!-- <remap from="ground_truth_pose" to="/mavros/local_position/odom"/>   -->
    
     <rosparam command="load" file="$(arg hmclFSM_config_file)" />
 
   </node>
 
-  <node pkg="tf" type="static_transform_publisher" name="cam_offboard_link_broadcaster" args="0 0 0 0.0 -1.5707963 1.5707963 camera_link cam_points 100"/>
+  <!-- <node pkg="tf" type="static_transform_publisher" name="cam_offboard_link_broadcaster" args="0 0 0 0.0 -1.5707963 1.5707963 camera_link cam_points 100"/> -->
+  <!-- <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link_virtual" args="0.0 0.0 -0.1 0.0 0.0 0.0 laser base_link 1000"/> -->
+  
+  <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_world" args="0.0 0 0.0 0.0 0.0 0.0 map world 10"/> -->
   
 </launch>

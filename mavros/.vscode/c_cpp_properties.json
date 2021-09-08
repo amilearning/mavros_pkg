@@ -1,0 +1,26 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/hmcl/data/mavros_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/hmcl_fsm/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/libmavconn/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/mav_comm/mav_msgs/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/mav_comm/mav_planning_msgs/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/mavros/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/mavros_msgs/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/offboard_ctrl/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/quadrotor_msgs/include/**",
+        "/home/hmcl/data/mavros_ws/src/mavros_pkg/mavros/test_mavros/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}

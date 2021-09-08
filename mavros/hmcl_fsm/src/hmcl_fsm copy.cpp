@@ -15,17 +15,17 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     att_clb_first_callback = false;
     mpcCommand_sub = nh_.subscribe<mav_msgs::RollPitchYawrateThrust>("/m100/setpoint_raw/roll_pitch_yawrate_thrust",1,&hmclFSM::mpcCommandCallback,this);        
     multiDOFJointSub = nh_.subscribe<trajectory_msgs::MultiDOFJointTrajectory>("/m100/command/trajectory",10,&hmclFSM::multiDOFJointCallback,this);            
-    odom_sub = nh_.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom",10, &hmclFSM::odom_cb,this);  
+    odom_sub = nh_.subscribe<nav_msgs::Odometry>("/ground_truth_pose",10, &hmclFSM::odom_cb,this);  
     lidar_sub = nh_.subscribe<sensor_msgs::LaserScan>("/laser/scan",1,&hmclFSM::lidarCallback,this);    
     state_sub = nh_.subscribe<mavros_msgs::State>("mavros/state", 10, &hmclFSM::state_cb,this);
-    bbx_sub   = nh_.subscribe<darknet_ros_msgs::BoundingBoxes>("/trt_yolo_ros/bounding_boxes", 10, &hmclFSM::bbxCallback,this);
-    vision_odom_sub = nh_.subscribe<geometry_msgs::PoseStamped>("/vins/px4/pose",10, &hmclFSM::visCallback,this);    
+    bbx_sub   = nh_.subscribe<darknet_ros_msgs::BoundingBoxes>("/trt_yolo_ros/bounding_boxes", 10, &hmclFSM::bbxCallback,this);    
+    vision_odom_sub = nh_.subscribe<nav_msgs::Odometry>("/vins_estimator/odometry",10, &hmclFSM::visCallback,this);    
     pos_cmd_sub = nh_.subscribe<quadrotor_msgs::PositionCommand>("/planning/pos_cmd", 10, &hmclFSM::poseCmdCallback,this);    
 
 
-    cmdloop_timer_ = cmd_nh_.createTimer(ros::Duration(0.01), &hmclFSM::cmdloopCallback,this); // Critical -> allocate another thread 
+    cmdloop_timer_ = cmd_nh_.createTimer(ros::Duration(0.1), &hmclFSM::cmdloopCallback,this); // Critical -> allocate another thread 
     fsm_timer_ = fsm_nh_.createTimer(ros::Duration(1), &hmclFSM::mainFSMCallback,this); // Critical -> allocate another thread 
-    lidar_timer_ = lidar_nh_.createTimer(ros::Duration(0.1), &hmclFSM::lidarTimeCallback,this); //Critical -> allocate another thread 
+    // lidar_timer_ = lidar_nh_.createTimer(ros::Duration(0.1), &hmclFSM::lidarTimeCallback,this); //Critical -> allocate another thread 
     
     
     waypoint_iter_timer_ = nh_.createTimer(ros::Duration(0.0), &hmclFSM::waypointTimerCallback,this,false,true); 
@@ -35,7 +35,7 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     mpc_cmd_pub =  nh_.advertise<mav_msgs::RollPitchYawrateThrust>("/mavros/setpoint_raw/roll_pitch_yawrate_thrust",5);
     rpyt_pub = nh_.advertise<mavros_msgs::AttitudeTarget>("/mavros/setpoint_raw/attitude",10);
     position_target_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);    
-    vis_pos_pub  =  nh_.advertise<geometry_msgs::TransformStamped>("/vins/posetransform", 10);    
+    vis_pos_pub  =  nh_.advertise<geometry_msgs::PoseStamped>("/mavros/vision_pose/pose", 10);    
     local_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
     camera_points_pub = nh_.advertise<sensor_msgs::PointCloud2>("camera_points", 2);     
 
@@ -79,9 +79,9 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
         rate.sleep();
     }
     
-    // ROS_INFO("PX4 connected");    
+    ROS_INFO("PX4 connected");    
 
-    // // Wait for other topics 
+    // Wait for other topics 
     while(!odom_received){
         ROS_INFO("wait for odom to be available");
         ros::spinOnce();
@@ -93,37 +93,35 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     arm_cmd.request.value = true;
     ros::Time last_request = ros::Time::now();
 
+
     ROS_INFO("Try OFFBOARD and Arming");
     armed = false;
     offboarded = false;
-    ROS_INFO("now we are in hand-hold mode");
-    armed = true;
-    offboarded = false;
     
-    // while(ros::ok()){            
-    //     if( current_state.mode != "OFFBOARD" && (ros::Time::now() - last_request > ros::Duration(1.0)))
-    //             {
-    //                 // if( set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent){ROS_INFO("Offboard enabled");}
-    //                 if( set_mode_client.call(offb_set_mode) ){
-    //                     ROS_INFO("Offboard enabled");
-    //                     offboarded = true;}
-    //                 last_request = ros::Time::now();
-    //             } else {          
-    //                 if( !current_state.armed && (ros::Time::now() - last_request > ros::Duration(1.0))){
-    //                     // if( arming_client.call(arm_cmd) && arm_cmd.response.success){ROS_INFO("Vehicle armed");}
-    //                     if( arming_client.call(arm_cmd)){
-    //                         ROS_INFO("Vehicle armed");
-    //                         armed = true;                            
-    //                         }else{
-    //                         ROS_INFO("arm failed");
-    //                         }
-    //                     last_request = ros::Time::now();
-    //                 }
-    //             }
-    //     if(offboarded && armed){ break;}                
-    // }    
+    while(ros::ok()){            
+        if( current_state.mode != "OFFBOARD" && (ros::Time::now() - last_request > ros::Duration(1.0)))
+                {
+                    // if( set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent){ROS_INFO("Offboard enabled");}
+                    if( set_mode_client.call(offb_set_mode) ){
+                        ROS_INFO("Offboard enabled");
+                        offboarded = true;}
+                    last_request = ros::Time::now();
+                } else {          
+                    if( !current_state.armed && (ros::Time::now() - last_request > ros::Duration(1.0))){
+                        // if( arming_client.call(arm_cmd) && arm_cmd.response.success){ROS_INFO("Vehicle armed");}
+                        if( arming_client.call(arm_cmd)){
+                            ROS_INFO("Vehicle armed");
+                            armed = true;                            
+                            }else{
+                            ROS_INFO("arm failed");
+                            }
+                        last_request = ros::Time::now();
+                    }
+                }
+        if(offboarded && armed){ break;}                
+    }    
     ROS_INFO("Initializing FSM");    
-    mainFSM_mode = mainFSMmode::Init;
+    mainFSM_mode = mainFSMmode::NA;
     Explore_Mode = ExploreMode::NA;
     Detect_Mode  = DetectMode::NA;
     Land_Mode =  LandMode::NA;
@@ -164,13 +162,13 @@ void hmclFSM::init_takeoff(){
         ROS_INFO("odom is not availble");
         return;
     }
-    //  if( current_state.mode != "OFFBOARD"){  // if( set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent){ROS_INFO("Offboard enabled");}
-    //         set_mode_client.call(offb_set_mode);                
-    //     } else {          
-    //         if( !current_state.armed ){            
-    //             arming_client.call(arm_cmd);
-    //         }
-    //     }
+     if( current_state.mode != "OFFBOARD"){  // if( set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent){ROS_INFO("Offboard enabled");}
+            set_mode_client.call(offb_set_mode);                
+        } else {          
+            if( !current_state.armed ){            
+                arming_client.call(arm_cmd);
+            }
+        }
     pose_target_.header.stamp = ros::Time::now();
     pose_target_.header.frame_id ='c';        
     pose_target_.coordinate_frame = 1; // mavros_msgs::PositionTarget::FRAME_LOCAL_NED;         
@@ -182,7 +180,7 @@ void hmclFSM::init_takeoff(){
 }
 
 void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){   
-    // if(!armed && !offboarded) return;     
+    if(!armed && !offboarded) return;     
     
     if(!check_if_drone_outside_global_box()){
         if(mainFSM_mode == mainFSMmode::Exploration){
@@ -309,9 +307,7 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
                             ROS_ERROR("[MBPLANNER-UI] MBplanner Stop Service call failed: %s",explore_client_stop.getService().c_str());
                             mainFSM_mode=mainFSMmode::NA; // If stop is not woking, we are moving into emergency phase.
                             }
-            }
-            
-            if(previous_mode == mainFSMmode::Avoidance){
+            }else if(previous_mode == mainFSMmode::Avoidance){
                 mainFSM_mode=mainFSMmode::Init; 
             }
             else{
@@ -689,40 +685,21 @@ void hmclFSM::mpcCommandCallback(const mav_msgs::RollPitchYawrateThrustConstPtr 
 
 void hmclFSM::cmdloopCallback(const ros::TimerEvent &event) {   
     
-//    tf_broadcaster_.sendTransform(transformStamped_tmp); 
-  
-    // tf_broadcaster.sendTransform(tf::StampedTransform(cam_to_world_tf, ros::Time::now(), "world", "camera_link2"));
-    // try {      
-    //   tf_listener_.waitForTransform("/world", "/camera",ros::Time::now() ,ros::Duration(1.0));
-    //   tf_listener_.lookupTransform("/world", "/camera", ros::Time::now() ,cam_to_world);
-    //   cam_to_world_tf.setBasis(cam_to_world.getBasis());
-    //   cam_to_world_tf.setOrigin(cam_to_world.getOrigin());
-      
-    // } catch (tf::TransformException& ex) {
-    //         ROS_INFO("no such transform from camera to world");   
-            
-    // }  
-    vis_pos_pub.publish(vis_pose);
-    
-    // tf_broadcaster.sendTransform(tf::StampedTransform(cam_to_world_tf, ros::Time::now(), "world", "camera_link"));
-    // ROS_INFO("~");
-    // if (avoidance_enable){
-    //     // Lidar based local avoidance activated
-    //      position_target_pub.publish(pose_target_);         
-    //      return; 
-    // }
-
-
+    if (avoidance_enable){
+        // Lidar based local avoidance activated
+         position_target_pub.publish(pose_target_);         
+         return; 
+    }
     
     
-    // if (mpc_cmd_enable){                
-    //     // mpc_cmd_pub.publish(mpc_cmd);
-    //     rpyt_pub.publish(att);
+    if (mpc_cmd_enable){                
+        // mpc_cmd_pub.publish(mpc_cmd);
+        rpyt_pub.publish(att);
         
-    //     return;
-    // }
+        return;
+    }
     
-    // position_target_pub.publish(pose_target_);  
+    position_target_pub.publish(pose_target_);  
     // ROS_INFO("position target pub");  
      
 }
@@ -853,7 +830,7 @@ void hmclFSM::odom_cb(const nav_msgs::OdometryConstPtr& msg){
     geometry_msgs::TransformStamped transformStamped;
     static tf2_ros::TransformBroadcaster br;  
     transformStamped.header.stamp = ros::Time::now();
-    transformStamped.header.frame_id = "world";
+    transformStamped.header.frame_id = "map";
     transformStamped.child_frame_id = "base_link";
     transformStamped.transform.translation.x = msg->pose.pose.position.x;
     transformStamped.transform.translation.y = msg->pose.pose.position.y;
@@ -867,44 +844,6 @@ void hmclFSM::odom_cb(const nav_msgs::OdometryConstPtr& msg){
         previous_pose = current_pose;
         odom_received = true;
         } 
-}
-
-
-void hmclFSM::visCallback(const geometry_msgs::PoseStampedConstPtr& msg){
-    
-    vis_pose.header = msg->header;
-    vis_pose.header.frame_id = "world";
-    vis_pose.child_frame_id = "base_link";
-    vis_pose.transform.translation.x = msg->pose.position.x;
-    vis_pose.transform.translation.y = msg->pose.position.y;
-    vis_pose.transform.translation.z = msg->pose.position.z;
-    vis_pose.transform.rotation.x = msg->pose.orientation.x;
-    vis_pose.transform.rotation.y = msg->pose.orientation.y;
-    vis_pose.transform.rotation.z = msg->pose.orientation.z;
-    vis_pose.transform.rotation.w = msg->pose.orientation.w;
-    
-    
-    // tf::Quaternion cam_to_baselink_quat;
-    // cam_to_baselink_quat.setRPY(1.5709 ,3.14195 ,1.5709);    
-    // cam_to_base_link.setRotation(cam_to_baselink_quat.normalize());
-    // cam_to_base_link.setOrigin(tf::Vector3(0.0,0.0,0.0));
-    
-    // cam_to_world_tf.setRotation(tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w).normalize());
-    // cam_to_world_tf.setOrigin(tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z));
-
-    // cam_to_world_tf.mult(cam_to_world_tf,cam_to_base_link);
-    // ROS_INFO("vins odom updated");
-    // transformStamped_tmp.header.stamp = ros::Time::now();
-    // transformStamped_tmp.header.frame_id = "world";
-    // transformStamped_tmp.child_frame_id = "camera_link";
-    // transformStamped_tmp.transform.translation.x = msg->pose.pose.position.x;
-    // transformStamped_tmp.transform.translation.y = msg->pose.pose.position.y;
-    // transformStamped_tmp.transform.translation.z = msg->pose.pose.position.z;    
-    // transformStamped_tmp.transform.rotation.x = msg->pose.pose.orientation.x;
-    // transformStamped_tmp.transform.rotation.y = msg->pose.pose.orientation.y;
-    // transformStamped_tmp.transform.rotation.z = msg->pose.pose.orientation.z;
-    // transformStamped_tmp.transform.rotation.w = msg->pose.pose.orientation.w;
-      
 }
 
 void hmclFSM::state_cb(const mavros_msgs::State::ConstPtr& msg){
