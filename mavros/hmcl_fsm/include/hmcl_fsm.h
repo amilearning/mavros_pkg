@@ -168,6 +168,7 @@ private:
     ros::Publisher mpc_cmd_pub;
     ros::Publisher manual_trj_pub;
     ros::Publisher vis_pos_pub;
+    ros::Publisher vins_odom_pub;
     ros::Publisher camera_points_pub;
     
     quadrotor_msgs::PositionCommand pose_cmd;
@@ -189,10 +190,12 @@ private:
     double yaw_scale = 1.0;
     double thrust_scale = 0.01;
     nav_msgs::Odometry odom_state; 
+    nav_msgs::Odometry vins_odom_state; 
+
     mavros_msgs::AttitudeTarget att;
     trajectory_msgs::MultiDOFJointTrajectory waypoints;
     bool manual_trj_switch_;
-    double target_x,target_y,target_z;
+    double target_x,target_y,target_z,target_yaw;
     
     sensor_msgs::LaserScan lidar_data;
 
@@ -229,7 +232,7 @@ private:
     double k0; 
     double init_takeoff_;
     double global_pose_x_min, global_pose_x_max, global_pose_y_min, global_pose_y_max, global_pose_z_min, global_pose_z_max;
-    
+    bool verbos;
     
     
     // Main FSM Callback
