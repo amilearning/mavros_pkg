@@ -72,6 +72,7 @@ void callback(const geometry_msgs::PoseStampedConstPtr& pose_data, const sensor_
     
 
     fused_pose_.header = pose_data->header;
+    
     fused_pose_.header.frame_id = "world";
     fused_pose_.child_frame_id = "base_link";    
 

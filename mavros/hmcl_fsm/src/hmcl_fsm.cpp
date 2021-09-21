@@ -8,27 +8,26 @@
 
 hmclFSM::~hmclFSM() {}
 
-hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,const ros::NodeHandle& cmd_nh, const ros::NodeHandle& fsm_nh, const ros::NodeHandle& lidar_nh)
-: nh_(nh), nh_private_(nh_private), cmd_nh_(cmd_nh), fsm_nh_(fsm_nh), lidar_nh_(lidar_nh){     
+hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,const ros::NodeHandle& cmd_nh, const ros::NodeHandle& fsm_nh, const ros::NodeHandle& lidar_nh, const ros::NodeHandle& odom_nh)
+: nh_(nh), nh_private_(nh_private), cmd_nh_(cmd_nh), fsm_nh_(fsm_nh), lidar_nh_(lidar_nh), odom_nh_(odom_nh){     
     waypoints_itr = 0;
     odom_received = false;
     att_clb_first_callback = false;
-    mpcCommand_sub = nh_.subscribe<mav_msgs::RollPitchYawrateThrust>("/m100/setpoint_raw/roll_pitch_yawrate_thrust",1,&hmclFSM::mpcCommandCallback,this);        
+    // mpcCommand_sub = nh_.subscribe<mav_msgs::RollPitchYawrateThrust>("/m100/setpoint_raw/roll_pitch_yawrate_thrust",1,&hmclFSM::mpcCommandCallback,this);        
     multiDOFJointSub = nh_.subscribe<trajectory_msgs::MultiDOFJointTrajectory>("/m100/command/trajectory",10,&hmclFSM::multiDOFJointCallback,this);            
-    odom_sub = nh_.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom",10, &hmclFSM::odom_cb,this);  
-    // odom_sub = nh_.subscribe<nav_msgs::Odometry>("vins_odom",10, &hmclFSM::odom_cb,this);  
-    lidar_sub = nh_.subscribe<sensor_msgs::LaserScan>("/laser/scan",1,&hmclFSM::lidarCallback,this);    
-    state_sub = nh_.subscribe<mavros_msgs::State>("mavros/state", 10, &hmclFSM::state_cb,this);
     bbx_sub   = nh_.subscribe<darknet_ros_msgs::BoundingBoxes>("/trt_yolo_ros/bounding_boxes", 10, &hmclFSM::bbxCallback,this);
-    vision_odom_sub = nh_.subscribe<geometry_msgs::PoseStamped>("/vins/px4/pose",10, &hmclFSM::visCallback,this);    
-    
     pos_cmd_sub = nh_.subscribe<quadrotor_msgs::PositionCommand>("/planning/pos_cmd", 10, &hmclFSM::poseCmdCallback,this);    
 
-
+    lidar_sub = lidar_nh_.subscribe<sensor_msgs::LaserScan>("/scan",1,&hmclFSM::lidarCallback,this);    
+    
+    odom_sub = odom_nh_.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom",10, &hmclFSM::odom_cb,this);  
+    state_sub = odom_nh_.subscribe<mavros_msgs::State>("mavros/state", 10, &hmclFSM::state_cb,this);
+    vision_odom_sub = odom_nh_.subscribe<geometry_msgs::PoseStamped>("/vins/px4/pose",10, &hmclFSM::visCallback,this);    
+    
 
     cmdloop_timer_ = cmd_nh_.createTimer(ros::Duration(0.01), &hmclFSM::cmdloopCallback,this); // Critical -> allocate another thread 
     // fsm_timer_ = fsm_nh_.createTimer(ros::Duration(1), &hmclFSM::mainFSMCallback,this); // Critical -> allocate another thread 
-    lidar_timer_ = lidar_nh_.createTimer(ros::Duration(0.1), &hmclFSM::lidarTimeCallback,this); //Critical -> allocate another thread 
+    // lidar_timer_ = lidar_nh_.createTimer(ros::Duration(0.1), &hmclFSM::lidarTimeCallback,this); //Critical -> allocate another thread 
     
     
     waypoint_iter_timer_ = nh_.createTimer(ros::Duration(0.0), &hmclFSM::waypointTimerCallback,this,false,true); 
@@ -42,6 +41,9 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     local_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
     camera_points_pub = nh_.advertise<sensor_msgs::PointCloud2>("camera_points", 2);     
     vins_odom_pub = nh_.advertise<nav_msgs::Odometry>("vins_odom", 10);
+    
+
+    
     // Define service Clients 
     arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
     set_mode_client = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
@@ -50,14 +52,9 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     explore_client_home = nh_.serviceClient<std_srvs::Trigger>("/planner_control_interface/std_srvs/homing_trigger");
     explore_client_global_planner = nh_.serviceClient<planner_msgs::pci_global>("pci_global");
     
-    
+    // Dynamic Configure parameters
     f = boost::bind(&hmclFSM::dyn_callback, this,_1, _2);
     server.setCallback(f);
-
-    // ros::param::set("d0",2.5);
-    // ros::param::set("k0",0.5);
-    // ros::param::set("thrust_scale",0.035);
-    // ros::param::set("manual_trj_switch",false);    
 
     load_FSM_Params("fsm");        
     print_FSM_Params();
@@ -488,6 +485,8 @@ void hmclFSM::dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t le
             d0 = config.d0;
             k0 = config.k0;
             thrust_scale = config.thrust_scale;
+            lidar_min_threshold = config.lidar_min_threshold;
+            lidar_avoidance_distance_ = config.lidar_avoidance_distance;
             manual_trj_switch_ = config.manual_trj_switch;
             target_x=config.target_x;
             target_y=config.target_y;
@@ -503,19 +502,31 @@ void hmclFSM::local_avoidance(){
 	float avoidance_vector_x = 0; 
 	float avoidance_vector_y = 0;
 	bool avoid = false;	
-	for(int i=1; i<lidar_data.ranges.size(); i++)
+    
+    for (double angle_tmp=-3.14195; angle_tmp < 3.14195;  angle_tmp +=lidar_data.angle_increment){
+        if(angle_tmp < lidar_data.angle_min || angle_tmp > lidar_data.angle_max){
+            float x = cos(angle_tmp);
+			float y = sin(angle_tmp);
+			float U = -0.5*k0*pow(((1/(d0-0.5)) - (1/d0)), 2);	
+			avoidance_vector_x = avoidance_vector_x + x*U;
+			avoidance_vector_y = avoidance_vector_y + y*U;
+        }            
+    } 
+    
+    for(int i=0; i<lidar_data.ranges.size(); i++)
 	{    
-		if(lidar_data.ranges[i] < d0 && lidar_data.ranges[i] > 0.35)
+		if(lidar_data.ranges[i] < d0 && lidar_data.ranges[i] > lidar_min_threshold)
 		{   
 			avoid = true;
-			float x = cos(lidar_data.angle_increment*i);
-			float y = sin(lidar_data.angle_increment*i);
-			float U = 0.5*k0*pow(((1/lidar_data.ranges[i]) - (1/d0)), 2);	
+			float x = cos(lidar_data.angle_increment*i+lidar_data.angle_min);
+			float y = sin(lidar_data.angle_increment*i+lidar_data.angle_min);
+			float U = -0.5*k0*pow(((1/lidar_data.ranges[i]) - (1/d0)), 2);	
 
 			avoidance_vector_x = avoidance_vector_x + x*U;
 			avoidance_vector_y = avoidance_vector_y + y*U;
-		}
+		}        
 	}	
+    
 	avoidance_vector_x = avoidance_vector_x*cos(current_yaw) - avoidance_vector_y*sin(current_yaw);
 	avoidance_vector_y = avoidance_vector_x*sin(current_yaw) + avoidance_vector_y*cos(current_yaw);
 	if(avoid)
@@ -530,8 +541,8 @@ void hmclFSM::local_avoidance(){
         pose_target_.coordinate_frame = 1;        
         pose_target_.position.x =  avoidance_vector_x + current_pose.position.x;        
         pose_target_.position.y =  avoidance_vector_y + current_pose.position.y;
-        if(current_pose.position.z < 1.0 || current_pose.position.z > global_pose_z_max-0.5){
-            pose_target_.position.z = 1.5;    
+        if(current_pose.position.z < init_takeoff_ -0.5|| current_pose.position.z > global_pose_z_max-0.5){
+            pose_target_.position.z = init_takeoff_;    
         }else{
             pose_target_.position.z =  current_pose.position.z;    
         }        
@@ -594,9 +605,9 @@ void hmclFSM::check_drone_status(){
 }
 
 void hmclFSM::lidarTimeCallback(const ros::TimerEvent& e){
-    if (mainFSM_mode == mainFSMmode::Init){
-        return;
-    }
+    // if (mainFSM_mode == mainFSMmode::Init){
+    //     return;
+    // }
     if (lidar_data.ranges.size() < 1){
         return;
     }
@@ -604,8 +615,8 @@ void hmclFSM::lidarTimeCallback(const ros::TimerEvent& e){
     int size = lidar_data.ranges.size();
     int minIndex = 0;
     double minval = 999;
-    for(int i = 0; i < lidar_data.ranges.size(); i++){
-        if ( lidar_data.ranges[i] <= minval){
+    for(int i = 0; i < lidar_data.ranges.size(); i++){        
+        if ( lidar_data.ranges[i] <= minval && lidar_data.ranges[i] > lidar_min_threshold){
             minval = lidar_data.ranges[i];
             minIndex = i;
         }                
@@ -629,8 +640,11 @@ void hmclFSM::lidarTimeCallback(const ros::TimerEvent& e){
             dist_tmp = dist_tmp + 100;           
         }
     }
+     ROS_INFO("minval = %f",minval);  
+     ROS_INFO("dist_tmp  = %f",dist_tmp);       
     if (dist_tmp < 0){ dist_tmp = 100*avg_half_width;}
     dist_tmp = dist_tmp / (2*avg_half_width);   
+    ROS_INFO("pose_dist_tmp  = %f",dist_tmp);  
     // ROS_INFO_STREAM("minimum distance (2d lidar) = " << dist_tmp);
     // ROS_INFO_STREAM(" = " << lidar_avoidance_distance_);
     if(dist_tmp < lidar_avoidance_distance_){
@@ -864,7 +878,8 @@ void hmclFSM::odom_cb(const nav_msgs::OdometryConstPtr& msg){
     current_yaw = yaw;
     geometry_msgs::TransformStamped transformStamped;
     static tf2_ros::TransformBroadcaster br;  
-    transformStamped.header.stamp = ros::Time::now();
+    // transformStamped.header.stamp = ros::Time::now();
+    transformStamped.header.stamp = msg->header.stamp;
     transformStamped.header.frame_id = "world";
     transformStamped.child_frame_id = "base_link";
     transformStamped.transform.translation.x = msg->pose.pose.position.x;
@@ -950,7 +965,9 @@ int main(int argc, char** argv){
     ros::NodeHandle cmd_nh_;
     ros::NodeHandle fsm_nh_;
     ros::NodeHandle lidar_nh_;
-    ros::NodeHandle nh_private("~");     
+    ros::NodeHandle odom_nh_;
+    ros::NodeHandle nh_private("~");   
+      
 
     ros::CallbackQueue callback_queue_cmd;
     cmd_nh_.setCallbackQueue(&callback_queue_cmd);
@@ -960,8 +977,11 @@ int main(int argc, char** argv){
 
     ros::CallbackQueue callback_queue_lidar;
     lidar_nh_.setCallbackQueue(&callback_queue_lidar);
+
+    ros::CallbackQueue callback_queue_odom;
+    odom_nh_.setCallbackQueue(&callback_queue_odom);
     
-    hmclFSM hmcl_FSM(nh,nh_private,cmd_nh_,fsm_nh_,lidar_nh_);        
+    hmclFSM hmcl_FSM(nh,nh_private,cmd_nh_,fsm_nh_,lidar_nh_,odom_nh_);        
 
 
     std::thread spinner_thread_cmd([&callback_queue_cmd]() {
@@ -979,11 +999,17 @@ int main(int argc, char** argv){
     spinner_lidar.spin(&callback_queue_lidar);
     });
 
+    std::thread spinner_thread_odom([&callback_queue_odom]() {
+    ros::SingleThreadedSpinner spinner_odom;
+    spinner_odom.spin(&callback_queue_odom);
+    });
+
 
     ros::spin();
     spinner_thread_cmd.join();
     spinner_thread_fsm.join();
     spinner_thread_lidar.join();
+    spinner_thread_odom.join();
     
     return 0;
 }

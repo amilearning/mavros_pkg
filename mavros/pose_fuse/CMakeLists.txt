@@ -148,7 +148,7 @@ catkin_package(
   #LIBRARIES sitl_test
   LIBRARIES mavros
   CATKIN_DEPENDS control_toolbox eigen_conversions geometry_msgs mavros mavros_msgs mavros_extras roscpp std_msgs tf2_ros mav_msgs dynamic_reconfigure darknet_ros_msgs quadrotor_msgs
-  DEPENDS Boost system_lib
+  DEPENDS Boost 
 )
 
 
@@ -161,7 +161,6 @@ catkin_package(
 ## Your package locations should be listed before other locations
 
 include_directories(  
-  include
   ${Boost_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}

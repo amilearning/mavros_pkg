@@ -121,6 +121,7 @@ private:
     ros::NodeHandle cmd_nh_;
     ros::NodeHandle fsm_nh_;
     ros::NodeHandle lidar_nh_;
+    ros::NodeHandle odom_nh_;
     
   
     // Define services
@@ -230,6 +231,7 @@ private:
     double lidar_avoidance_distance_;
     double d0;
     double k0; 
+    double lidar_min_threshold;
     double init_takeoff_;
     double global_pose_x_min, global_pose_x_max, global_pose_y_min, global_pose_y_max, global_pose_z_min, global_pose_z_max;
     bool verbos;
@@ -277,7 +279,7 @@ private:
 
    
 public:
-    hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private, const ros::NodeHandle& cmd_nh, const ros::NodeHandle& fsm_nh, const ros::NodeHandle& lidar_nh);
+    hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private, const ros::NodeHandle& cmd_nh, const ros::NodeHandle& fsm_nh, const ros::NodeHandle& lidar_nh, const ros::NodeHandle& odom_nh);
     ~hmclFSM();
     
 };
