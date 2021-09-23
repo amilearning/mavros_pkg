@@ -174,6 +174,8 @@ private:
     
     quadrotor_msgs::PositionCommand pose_cmd;
     mav_msgs::RollPitchYawrateThrust mpc_cmd;
+    bool waypoint_switch_;
+    bool local_avoidance_switch_;
     bool mpc_cmd_enable;
     bool avoidance_enable;
     mavros_msgs::SetMode offb_set_mode;   
@@ -188,6 +190,7 @@ private:
     geometry_msgs::TransformStamped vis_pose;
     
     double current_yaw; 
+    double yaw_rate_max = 0.4;
     double yaw_scale = 1.0;
     double thrust_scale = 0.01;
     nav_msgs::Odometry odom_state; 
@@ -229,6 +232,7 @@ private:
     
     // parameter values
     double lidar_avoidance_distance_;
+    double lidar_avoidance_move_distance_;
     double d0;
     double k0; 
     double lidar_min_threshold;
@@ -250,16 +254,14 @@ private:
     // utility functions 
     double get_distance(geometry_msgs::Pose &p1,geometry_msgs::Pose &p2);
     void load_FSM_Params(std::string group);
-    void print_FSM_Params();
     // control related callback
     void cmdloopCallback(const ros::TimerEvent &event);    
     void waypointTimerCallback(const ros::TimerEvent &event); 
     void multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr &msg);
-    void mpcCommandCallback(const mav_msgs::RollPitchYawrateThrustConstPtr &msg);
+
     void sendManualTrajectory();
     void poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg);
-    void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg);
-
+   
 
     // sensors callback
     void lidarCallback(const sensor_msgs::LaserScanConstPtr &msg);
@@ -273,7 +275,7 @@ private:
     void check_drone_status();
     void local_avoidance();
     void refine_path_via_lidarData();
-    void set_target_pose(double x,double y, double z, double yaw);
+    
     void dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t level);
     
 

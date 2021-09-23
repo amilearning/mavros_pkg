@@ -13,7 +13,7 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     waypoints_itr = 0;
     odom_received = false;
     att_clb_first_callback = false;
-    // mpcCommand_sub = nh_.subscribe<mav_msgs::RollPitchYawrateThrust>("/m100/setpoint_raw/roll_pitch_yawrate_thrust",1,&hmclFSM::mpcCommandCallback,this);        
+    
     multiDOFJointSub = nh_.subscribe<trajectory_msgs::MultiDOFJointTrajectory>("/m100/command/trajectory",10,&hmclFSM::multiDOFJointCallback,this);            
     bbx_sub   = nh_.subscribe<darknet_ros_msgs::BoundingBoxes>("/trt_yolo_ros/bounding_boxes", 10, &hmclFSM::bbxCallback,this);
     pos_cmd_sub = nh_.subscribe<quadrotor_msgs::PositionCommand>("/planning/pos_cmd", 10, &hmclFSM::poseCmdCallback,this);    
@@ -27,7 +27,7 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
 
     cmdloop_timer_ = cmd_nh_.createTimer(ros::Duration(0.01), &hmclFSM::cmdloopCallback,this); // Critical -> allocate another thread 
     // fsm_timer_ = fsm_nh_.createTimer(ros::Duration(1), &hmclFSM::mainFSMCallback,this); // Critical -> allocate another thread 
-    // lidar_timer_ = lidar_nh_.createTimer(ros::Duration(0.1), &hmclFSM::lidarTimeCallback,this); //Critical -> allocate another thread 
+    lidar_timer_ = lidar_nh_.createTimer(ros::Duration(0.1), &hmclFSM::lidarTimeCallback,this); //Critical -> allocate another thread 
     
     
     waypoint_iter_timer_ = nh_.createTimer(ros::Duration(0.0), &hmclFSM::waypointTimerCallback,this,false,true); 
@@ -56,9 +56,15 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     f = boost::bind(&hmclFSM::dyn_callback, this,_1, _2);
     server.setCallback(f);
 
-    load_FSM_Params("fsm");        
-    print_FSM_Params();
-    
+    load_FSM_Params("fsm"); 
+    ROS_INFO("init_takeoff_ = %f",  init_takeoff_);
+    ROS_INFO("lidar_avoidance_distance_ = %f", lidar_avoidance_distance_);
+    ROS_INFO("global_pose_x_min = %f",global_pose_x_min); 
+    ROS_INFO("global_pose_y_min = %f",global_pose_y_min); 
+    ROS_INFO("global_pose_z_min = %f",global_pose_z_min); 
+    ROS_INFO("global_pose_x_max = %f",global_pose_x_max); 
+    ROS_INFO("global_pose_y_max = %f",global_pose_y_max); 
+    ROS_INFO("global_pose_z_max = %f",global_pose_z_max); 
          
     
     ROS_INFO_STREAM("d0 is set to be = " << d0);
@@ -137,7 +143,6 @@ void hmclFSM::load_FSM_Params(std::string group){
     nh_private_.getParam("k0",k0);
     nh_private_.getParam("thrust_scale",thrust_scale);
     nh_private_.getParam("manual_trj_switch",manual_trj_switch_);
-
     nh_private_.getParam(group+"/init_takeoff",init_takeoff_);
     nh_private_.getParam(group+"/lidar_avoidance_distance",lidar_avoidance_distance_);
     nh_private_.getParam(group+"/global_pose_x_min",global_pose_x_min);
@@ -146,19 +151,9 @@ void hmclFSM::load_FSM_Params(std::string group){
     nh_private_.getParam(group+"/global_pose_x_max",global_pose_x_max);
     nh_private_.getParam(group+"/global_pose_y_max",global_pose_y_max);
     nh_private_.getParam(group+"/global_pose_z_max",global_pose_z_max);
-
 }
 
-void hmclFSM::print_FSM_Params(){    
-    ROS_INFO("init_takeoff_ = %f",  init_takeoff_);
-    ROS_INFO("lidar_avoidance_distance_ = %f", lidar_avoidance_distance_);
-    ROS_INFO("global_pose_x_min = %f",global_pose_x_min); 
-    ROS_INFO("global_pose_y_min = %f",global_pose_y_min); 
-    ROS_INFO("global_pose_z_min = %f",global_pose_z_min); 
-    ROS_INFO("global_pose_x_max = %f",global_pose_x_max); 
-    ROS_INFO("global_pose_y_max = %f",global_pose_y_max); 
-    ROS_INFO("global_pose_z_max = %f",global_pose_z_max); 
-}
+
 
 void hmclFSM::init_takeoff(){
     if(!odom_received){
@@ -408,14 +403,12 @@ void hmclFSM::printFSMstate(){
     ROS_INFO("mainFSM_mode = %s", stateToString(Detect_Mode));    
     ROS_INFO("mainFSM_mode = %s", stateToString(Land_Mode));  
     ROS_INFO("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-    
 }
 
 double hmclFSM::get_distance(geometry_msgs::Pose &p1,geometry_msgs::Pose &p2){
     double dist = hypot(hypot(p1.position.x-p2.position.x,p1.position.y-p2.position.y),p1.position.z-p2.position.z);
         return dist;
 }
-
 
 bool hmclFSM::check_if_drone_outside_global_box(){
      if(!odom_received){return true;}
@@ -431,30 +424,13 @@ bool hmclFSM::check_if_drone_outside_global_box(){
     return true;
 }
 
-
-void hmclFSM::pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg){
-    geometry_msgs::TransformStamped transformStamped;
-     tf2_ros::TransformListener tfListener(tfBuffer);   
-        try {
-            transformStamped = tfBuffer.lookupTransform("base_link", "camera_link",
-                    msg->header.stamp,ros::Duration(0.3));            
-            tf2::doTransform(*msg, cloud_out, transformStamped);
-            cloud_out.header.frame_id = "cam_points";
-            cloud_out.header.stamp = msg->header.stamp;
-            camera_points_pub.publish(cloud_out);            
-//          pcl_ros::transformPointCloud("robotarm", cloud_in, cloud_out, tfListener);
-        } catch (tf2::TransformException &ex) {
-            ROS_WARN("%s", ex.what());                       
-        }
-
-}
-
 void hmclFSM::poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg){
     // ROS_INFO("pose cmd recied");
     pose_target_.header.stamp = ros::Time::now();
     pose_target_.header.frame_id ='c';        
     pose_target_.coordinate_frame = 1; // mavros_msgs::PositionTarget::FRAME_LOCAL_NED;         
     
+    pose_target_.type_mask = 0;
     pose_target_.position.x = msg->position.x; 
     pose_target_.position.y = msg->position.y; 
     pose_target_.position.z = msg->position.z; 
@@ -468,7 +444,11 @@ void hmclFSM::poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg
     pose_target_.acceleration_or_force.z = msg->acceleration.z; 
 
     pose_target_.yaw = msg->yaw;
-    pose_target_.yaw_rate = msg->yaw_dot;
+    if (msg->yaw_dot > yaw_rate_max){
+        pose_target_.yaw_rate = yaw_rate_max;        
+    }else{
+        pose_target_.yaw_rate = msg->yaw_dot;
+    }
 
 }
 
@@ -487,12 +467,17 @@ void hmclFSM::dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t le
             thrust_scale = config.thrust_scale;
             lidar_min_threshold = config.lidar_min_threshold;
             lidar_avoidance_distance_ = config.lidar_avoidance_distance;
+            lidar_avoidance_move_distance_ = config.lidar_avoidance_move_distance;
             manual_trj_switch_ = config.manual_trj_switch;
             target_x=config.target_x;
             target_y=config.target_y;
             target_z=config.target_z;
             target_yaw = config.target_yaw;
-            ROS_INFO("d0 = %f, k= %f, thrust_scale = %f", d0,k0,thrust_scale);            
+            waypoint_switch_ = config.waypoint_switch;
+            local_avoidance_switch_ = config.local_avoidance_switch;
+            
+            
+            // ROS_INFO("d0 = %f, k= %f, thrust_scale = %f", d0,k0,thrust_scale);            
 }
 
 
@@ -507,7 +492,7 @@ void hmclFSM::local_avoidance(){
         if(angle_tmp < lidar_data.angle_min || angle_tmp > lidar_data.angle_max){
             float x = cos(angle_tmp);
 			float y = sin(angle_tmp);
-			float U = -0.5*k0*pow(((1/(d0-0.5)) - (1/d0)), 2);	
+			float U = -0.5*k0*pow(((1/(0.8)) - (1/d0)), 2);	
 			avoidance_vector_x = avoidance_vector_x + x*U;
 			avoidance_vector_y = avoidance_vector_y + y*U;
         }            
@@ -529,16 +514,19 @@ void hmclFSM::local_avoidance(){
     
 	avoidance_vector_x = avoidance_vector_x*cos(current_yaw) - avoidance_vector_y*sin(current_yaw);
 	avoidance_vector_y = avoidance_vector_x*sin(current_yaw) + avoidance_vector_y*cos(current_yaw);
-	if(avoid)
-	{   
-		if( sqrt(pow(avoidance_vector_x,2) + pow(avoidance_vector_y,2)) > 3)
-		{
-			avoidance_vector_x = 3 * (avoidance_vector_x/sqrt(pow(avoidance_vector_x,2) + pow(avoidance_vector_y,2)));
-			avoidance_vector_y = 3 * (avoidance_vector_y/sqrt(pow(avoidance_vector_x,2) + pow(avoidance_vector_y,2)));
-		}		
+    avoidance_vector_x = lidar_avoidance_move_distance_ * (avoidance_vector_x/sqrt(pow(avoidance_vector_x,2) + pow(avoidance_vector_y,2)));
+    avoidance_vector_y = lidar_avoidance_move_distance_ * (avoidance_vector_y/sqrt(pow(avoidance_vector_x,2) + pow(avoidance_vector_y,2)));
+	if(avoid && local_avoidance_switch_)
+	{   			
         pose_target_.header.stamp = ros::Time::now();
         pose_target_.header.frame_id ='c';    
-        pose_target_.coordinate_frame = 1;        
+        pose_target_.coordinate_frame = 1;       
+        if((avoidance_vector_x + current_pose.position.x)  < global_pose_x_min || (avoidance_vector_x + current_pose.position.x)  > global_pose_x_max){
+        avoidance_vector_x = 0.0;
+        }
+         if((avoidance_vector_y + current_pose.position.y)  < global_pose_y_min || (avoidance_vector_y + current_pose.position.y)  > global_pose_y_max){
+        avoidance_vector_y = 0.0;
+        }
         pose_target_.position.x =  avoidance_vector_x + current_pose.position.x;        
         pose_target_.position.y =  avoidance_vector_y + current_pose.position.y;
         if(current_pose.position.z < init_takeoff_ -0.5|| current_pose.position.z > global_pose_z_max-0.5){
@@ -554,18 +542,13 @@ void hmclFSM::local_avoidance(){
                                      mavros_msgs::PositionTarget::IGNORE_VZ;
               
         avoidance_enable = true;
-
         target_pose.position.x = pose_target_.position.x;
         target_pose.position.y = pose_target_.position.y;
-        target_pose.position.z = pose_target_.position.z;
-        ROS_INFO("Avoidance Set position x = %f, y = %f, z = %f, yaw = %f", pose_target_.position.x, pose_target_.position.y, pose_target_.position.z, current_yaw);  
-         
-        
-         
+        target_pose.position.z = pose_target_.position.z;          
 	}
-	
-
-
+    manual_trj_switch_ = false;
+    ROS_INFO("Avoidance vector x = %f, y = %f", avoidance_vector_x, avoidance_vector_y);  
+       
     // and refine trajectory to follow if there is any     
     if(waypoints.points.size() > 0 ){
         refine_path_via_lidarData();        
@@ -585,22 +568,17 @@ void hmclFSM::refine_path_via_lidarData(){
 
 void hmclFSM::check_drone_status(){
     //TODO - update Mode status to identify the required manuever of drone
-    // ROS_INFO("check mode");
-    
+    // ROS_INFO("check mode")    
     send_waypoint = false;
-    // follow the local avoidance pose control 
-    
+    // follow the local avoidance pose control     
     // if(avoidance_enable){        
     //     mpc_cmd_enable = false;
     // }else{        
     //     mpc_cmd_enable = true;
-    // }
-    
+    // }    
     if(manual_trj_switch_){
-        sendManualTrajectory();  
-              
+        sendManualTrajectory();                
     }
-
     return;
 }
 
@@ -653,54 +631,12 @@ void hmclFSM::lidarTimeCallback(const ros::TimerEvent& e){
         local_avoidance();                
     }else{
         avoidance_enable = false;
-        // set_target_pose(0,0,0.7,0);
+        
     }
 }
 
 void hmclFSM::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
     lidar_data = *msg;       
-}
-
-void hmclFSM::mpcCommandCallback(const mav_msgs::RollPitchYawrateThrustConstPtr &msg){
-    att_clb_time_in_sec  = ros::Time::now().toSec();
-    if (!att_clb_first_callback){
-        att_clb_first_callback = true;  
-        att_clb_time_in_sec_prev = att_clb_time_in_sec;          
-        return;
-    }   
-    mpc_cmd = *msg; 
-    att.header = msg->header;    
-    // att.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE | mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE | mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE |
-    //         mavros_msgs::AttitudeTarget::IGNORE_ATTITUDE | mavros_msgs::AttitudeTarget::IGNORE_THRUST; 
-    att.type_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE | mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE; 
-    
-        tf::Quaternion quat;
-        tf::quaternionMsgToTF(odom_state.pose.pose.orientation, quat);
-
-        // the tf::Quaternion has a method to acess roll pitch and yaw
-        double roll_, pitch_, yaw_;
-        tf::Matrix3x3(quat).getRPY(roll_, pitch_, yaw_);       
-        double dt = att_clb_time_in_sec - att_clb_time_in_sec_prev; 
-        if (dt < 0){
-            ROS_WARN("att dif time is less than zero !!!!!!!!!!!");
-        }
-        yaw_ = yaw_ + yaw_scale * msg->yaw_rate* dt; 
-
-        tf2::Quaternion quat_;
-        quat_.setRPY(msg->roll, msg->pitch,yaw_);
-        quat_=quat_.normalize();
-
-        att.orientation.x = quat_.getX();
-        att.orientation.y = quat_.getY();
-        att.orientation.z = quat_.getZ();
-        att.orientation.w = quat_.getW();
-        
-        att.body_rate.x = 0.0;
-        att.body_rate.y = 0.0;
-        att.body_rate.z = msg->yaw_rate; 
-        att.thrust = msg->thrust.z * thrust_scale;
-        
-        att_clb_time_in_sec_prev  = att_clb_time_in_sec;
 }
 
 
@@ -709,7 +645,7 @@ void hmclFSM::cmdloopCallback(const ros::TimerEvent &event) {
      if(manual_trj_switch_){
         sendManualTrajectory();                
     }
-    
+    position_target_pub.publish(pose_target_);   
 //    tf_broadcaster_.sendTransform(transformStamped_tmp); 
   
     // tf_broadcaster.sendTransform(tf::StampedTransform(cam_to_world_tf, ros::Time::now(), "world", "camera_link2"));
@@ -751,8 +687,8 @@ void hmclFSM::cmdloopCallback(const ros::TimerEvent &event) {
 
 
 void hmclFSM::sendManualTrajectory(){
-    waypoints.points.clear();    
-    waypoints_itr = 0;
+    // waypoints.points.clear();    
+    // waypoints_itr = 0;
     pose_target_.header.stamp = ros::Time::now();
     pose_target_.header.frame_id ='map';        
     pose_target_.coordinate_frame = 1; // mavros_msgs::PositionTarget::FRAME_LOCAL_NED;            
@@ -765,9 +701,9 @@ void hmclFSM::sendManualTrajectory(){
     pose_target_.position.y = target_y;
     pose_target_.position.z = target_z;                         
     pose_target_.yaw = target_yaw;            
-    pose_target_.yaw_rate = 0.0;
-    position_target_pub.publish(pose_target_);   
-    waypoints.points.clear();    
+    pose_target_.yaw_rate = 0.1;
+    // position_target_pub.publish(pose_target_);   
+    // waypoints.points.clear();    
 }
 
 
@@ -775,9 +711,15 @@ void hmclFSM::sendManualTrajectory(){
 void hmclFSM::waypointTimerCallback(const ros::TimerEvent &event){   
     // ROS_INFO("command_waiting_times_ = %lf" , command_waiting_times_.front().toSec());
     // ROS_INFO("waypoints_itr = %d", waypoints_itr);
-     if (waypoints.points.size() > 0){        
-        // ROS_INFO("waypoints iter = %d", waypoints_itr);
+    
+    if(!waypoint_switch_ || manual_trj_switch_){
+        return;
+    }
+    
+    if (waypoints.points.size() > 0){  
+        
         if (waypoints_itr >= 0 && waypoints_itr < waypoints.points.size()){            
+        
             pose_target_.header.stamp = ros::Time::now();
             pose_target_.header.frame_id ='map';        
             pose_target_.coordinate_frame = 1; // mavros_msgs::PositionTarget::FRAME_LOCAL_NED;            
@@ -794,8 +736,8 @@ void hmclFSM::waypointTimerCallback(const ros::TimerEvent &event){
             double roll, pitch, yaw;
             m.getRPY(roll, pitch, yaw);        
             pose_target_.yaw = yaw;            
-            pose_target_.yaw_rate = 1.0;
-            // position_target_pub.publish(pose_target_);   
+            pose_target_.yaw_rate = 0.1;
+            position_target_pub.publish(pose_target_);   
             send_waypoint = true;            
         }       
     } 
@@ -810,58 +752,55 @@ void hmclFSM::waypointTimerCallback(const ros::TimerEvent &event){
 }
 
 void hmclFSM::multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr &msg) {  
-//   for (int i = 0; i < msg->points.size(); i++)
-//     {
-//     waypoints.points.push_back(msg->points[i]);
-//     }
- //  
-if (msg->points.size() > 1){  
-        int lookahead_idx = 3;
-        float min_dist = 0;
-        float min_idx = 1;    
-    // if size is greather than lookhaed idx, Find the closest point from current position and propogate only the points foreahead.  
-        if (msg->points.size() > lookahead_idx){        
-            for (int i=1; i < msg->points.size();i++){                    
-                float tmp_dist = hypot(hypot(msg->points[i].transforms[0].translation.x-current_pose.position.x,
-                                            msg->points[i].transforms[0].translation.y-current_pose.position.y),
-                                    msg->points[i].transforms[0].translation.z-current_pose.position.z);
-                    if(tmp_dist <= min_dist){
-                        min_dist = tmp_dist;
-                        min_idx = i;
-                    }                 
-            }     
-            if (min_idx +lookahead_idx > msg->points.size()){
-                min_idx = 1;
-            }else{
-                min_idx += lookahead_idx;
+    
+    if (msg->points.size() > 1){  
+            int lookahead_idx = 3;
+            float min_dist = 0;
+            float min_idx = 1;    
+        // if size is greather than lookhaed idx, Find the closest point from current position and propogate only the points foreahead.  
+            if (msg->points.size() > lookahead_idx){        
+                for (int i=1; i < msg->points.size();i++){                    
+                    float tmp_dist = hypot(hypot(msg->points[i].transforms[0].translation.x-current_pose.position.x,
+                                                msg->points[i].transforms[0].translation.y-current_pose.position.y),
+                                        msg->points[i].transforms[0].translation.z-current_pose.position.z);
+                        if(tmp_dist <= min_dist){
+                            min_dist = tmp_dist;
+                            min_idx = i;
+                        }                 
+                }     
+                if (min_idx +lookahead_idx > msg->points.size()){
+                    min_idx = 1;
+                }else{
+                    min_idx += lookahead_idx;
+                }
+            }    
+            waypoint_iter_timer_.stop();
+            waypoints.points.clear();
+            command_waiting_times_.clear();
+            //Replace trajectory starting from lookaheaded points
+            for (int i=min_idx-1;i < msg->points.size(); i++){
+                    waypoints.points.push_back(msg->points[i]);
             }
-        }    
-        waypoint_iter_timer_.stop();
-        waypoints.points.clear();
-        command_waiting_times_.clear();
-    //Replace trajectory starting from lookaheaded points
-    for (int i=min_idx-1;i < msg->points.size(); i++){
-            waypoints.points.push_back(msg->points[i]);
-    }
-            
-        //   waypoints.points = msg->points;    
-            // ROS_INFO("Trjectory length = %d",msg->points.size());
-            waypoints_itr = 0; 
+                
+            //   waypoints.points = msg->points;    
+                // ROS_INFO("Trjectory length = %d",msg->points.size());
+                waypoints_itr = 0; 
 
-            // ROS_INFO("trejactory size = %d", msg->points.size());
-            // ROS_INFO("the closest point + lookahead at trajectory index %d", min_idx);
-            for (int i=1 ; i < msg->points.size(); i++){      
-                command_waiting_times_.push_back(msg->points[i].time_from_start  - msg->points[i-1].time_from_start);
-                // ROS_INFO("push time = %lf",double((msg->points[i].time_from_start  - msg->points[i-1].time_from_start).toSec()));
-            }
-            waypoint_iter_timer_.setPeriod(command_waiting_times_.front());
-            command_waiting_times_.pop_front();
-            waypoint_iter_timer_.start();
-    }
-    else{
-        ROS_WARN_STREAM("Got MultiDOFJointTrajectory message, but message has no points.");
-    }
-  
+                // ROS_INFO("trejactory size = %d", msg->points.size());
+                // ROS_INFO("the closest point + lookahead at trajectory index %d", min_idx);
+                for (int i=min_idx-1 ; i < msg->points.size(); i++){      
+                    command_waiting_times_.push_back(msg->points[i].time_from_start  - msg->points[i-1].time_from_start);
+                    // ROS_INFO("push time = %lf",double((msg->points[i].time_from_start  - msg->points[i-1].time_from_start).toSec()));
+                }
+                waypoint_iter_timer_.setPeriod(command_waiting_times_.front());
+                command_waiting_times_.pop_front();
+                waypoint_iter_timer_.start();
+                ROS_WARN_STREAM("Got MultiDOFJointTrajectory message");
+        }
+        else{
+            ROS_WARN_STREAM("Got MultiDOFJointTrajectory message, but message has no points.");
+        }
+    
 }
 
 
@@ -922,26 +861,6 @@ void hmclFSM::visCallback(const geometry_msgs::PoseStampedConstPtr& msg){
     vins_odom_state.pose.pose.orientation.z = msg->pose.orientation.z;
     vins_odom_state.pose.pose.orientation.w = msg->pose.orientation.w;
     vins_odom_pub.publish(vins_odom_state);
-    // tf::Quaternion cam_to_baselink_quat;
-    // cam_to_baselink_quat.setRPY(1.5709 ,3.14195 ,1.5709);    
-    // cam_to_base_link.setRotation(cam_to_baselink_quat.normalize());
-    // cam_to_base_link.setOrigin(tf::Vector3(0.0,0.0,0.0));
-    
-    // cam_to_world_tf.setRotation(tf::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w).normalize());
-    // cam_to_world_tf.setOrigin(tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z));
-
-    // cam_to_world_tf.mult(cam_to_world_tf,cam_to_base_link);
-    // ROS_INFO("vins odom updated");
-    // transformStamped_tmp.header.stamp = ros::Time::now();
-    // transformStamped_tmp.header.frame_id = "world";
-    // transformStamped_tmp.child_frame_id = "camera_link";
-    // transformStamped_tmp.transform.translation.x = msg->pose.pose.position.x;
-    // transformStamped_tmp.transform.translation.y = msg->pose.pose.position.y;
-    // transformStamped_tmp.transform.translation.z = msg->pose.pose.position.z;    
-    // transformStamped_tmp.transform.rotation.x = msg->pose.pose.orientation.x;
-    // transformStamped_tmp.transform.rotation.y = msg->pose.pose.orientation.y;
-    // transformStamped_tmp.transform.rotation.z = msg->pose.pose.orientation.z;
-    // transformStamped_tmp.transform.rotation.w = msg->pose.pose.orientation.w;
       
 }
 
@@ -949,15 +868,7 @@ void hmclFSM::state_cb(const mavros_msgs::State::ConstPtr& msg){
     current_state = *msg;
 }
 
-void hmclFSM::set_target_pose(double x,double y, double z, double yaw){
-            pose_target_.header.stamp = ros::Time::now();
-            pose_target_.header.frame_id ='c';   
-            pose_target_.coordinate_frame = 1; // mavros_msgs::PositionTarget::FRAME_LOCAL_NED;                        
-            pose_target_.position.x = x;
-            pose_target_.position.y = y;
-            pose_target_.position.z = z;               
-            pose_target_.yaw = yaw;
-}
+
 
 int main(int argc, char** argv){
     ros::init(argc, argv, "hmcl_fsm");
