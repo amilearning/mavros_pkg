@@ -8,6 +8,7 @@ fsm:
   global_pose_y_max: 1.8
   global_pose_z_max: 1.4
 
+FSM_mode: 1
 d0: 2.0
 k0: 0.1
 thrust_scale: 0.035

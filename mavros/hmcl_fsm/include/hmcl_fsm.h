@@ -140,6 +140,7 @@ private:
     ros::Subscriber mpcCommand_sub;
     ros::Subscriber bbx_sub; 
     ros::Subscriber pos_cmd_sub;
+    ros::Subscriber local_path_trigger_sub;
 
     ros::Subscriber points_sub;
     tf2_ros::Buffer tfBuffer;      
@@ -171,6 +172,7 @@ private:
     ros::Publisher vis_pos_pub;
     ros::Publisher vins_odom_pub;
     ros::Publisher camera_points_pub;
+    ros::Publisher local_goal_pub;
     
     quadrotor_msgs::PositionCommand pose_cmd;
     mav_msgs::RollPitchYawrateThrust mpc_cmd;
@@ -178,6 +180,10 @@ private:
     bool local_avoidance_switch_;
     bool mpc_cmd_enable;
     bool avoidance_enable;
+    bool local_trj_switch_, local_target_send_;
+    bool local_trj_enable;
+    bool local_path_received;
+    double local_target_x_, local_target_y_;
     mavros_msgs::SetMode offb_set_mode;   
     mavros_msgs::CommandBool arm_cmd; 
     mavros_msgs::State current_state;    
@@ -239,11 +245,15 @@ private:
     double init_takeoff_;
     double global_pose_x_min, global_pose_x_max, global_pose_y_min, global_pose_y_max, global_pose_z_min, global_pose_z_max;
     bool verbos;
+    int FSM_mode;
     
     
     // Main FSM Callback
     void mainFSMCallback(const ros::TimerEvent &event);        
     void printFSMstate();
+
+    //local FSM callback
+    void localFSMCallback(const ros::TimerEvent &event);        
     
     //health check
     bool check_if_drone_outside_global_box();
@@ -261,6 +271,8 @@ private:
 
     void sendManualTrajectory();
     void poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg);
+
+    void localTrajTrigCallback(const std_msgs::EmptyConstPtr &msg);
    
 
     // sensors callback
@@ -273,7 +285,7 @@ private:
     void visCallback(const geometry_msgs::PoseStampedConstPtr& msg);    
     void state_cb(const mavros_msgs::State::ConstPtr& msg);
     void check_drone_status();
-    void local_avoidance();
+    void local_avoidance(double min_distance);
     void refine_path_via_lidarData();
     
     void dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t level);

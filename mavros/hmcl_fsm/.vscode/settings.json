@@ -8,5 +8,9 @@
         "/home/hojin/drone_ws2/mavros_ws/devel/lib/python2.7/dist-packages",
         "/home/hojin/catkin_ws/devel/lib/python2.7/dist-packages",
         "/opt/ros/melodic/lib/python2.7/dist-packages"
-    ]
+    ],
+    "files.associations": {
+        "unordered_map": "cpp",
+        "unordered_set": "cpp"
+    }
 }
