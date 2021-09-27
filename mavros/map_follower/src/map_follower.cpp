@@ -157,13 +157,38 @@ void mapfollower::lidarTimeCallback(const ros::TimerEvent &event) {
 void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
     lidar_data = *msg; 
 
+
+        
     double idx_90 = 89; 
-         double idx_60 = idx_90 + 30; 
-    double idx_25 = idx_90 + 65; 
-   
+    double idx_60 = idx_90 + 30; 
+    double idx_25 = idx_90 + 65;    
     double idx25 = idx_25 + 50; 
     double idx60 = idx25 + 35;
     double idx90 = idx25 + 65; 
+    
+        double front_min_val = lidar_data.range_max;
+        double front_min_idx = (int)lidar_data.ranges.size()/2-20;
+         for( int i= (int)lidar_data.ranges.size()/2-20; i <(int)lidar_data.ranges.size()/2+20; i++){
+            if(front_min_val > lidar_data.ranges[i]){
+                front_min_val = lidar_data.ranges[i];
+                front_min_idx = i;
+            }
+        }  
+        if (front_min_val < desired_distance*2.0){
+            idx_60 = front_min_idx;
+        }
+    /////////////////////
+    double break_point_idx = 0;
+    for( int i= idx_90; i <(int)lidar_data.ranges.size()/2; i++){
+            double thres_dist = 
+            if(fabs(lidar_data.ranges[i] - lidar_data.ranges[i+1]) > 
+                
+                front_min_val > lidar_data.ranges[i]){
+                front_min_val = lidar_data.ranges[i];
+                front_min_idx = i;
+            }
+        }  
+    /////////////////////
  
     double l_dist_b = lidar_data.ranges[idx90];
     double l_angle_b  = lidar_data.angle_min + lidar_data.angle_increment*idx90;
