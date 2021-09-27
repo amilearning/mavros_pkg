@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>pose_fuse</name>
+  <name>map_follower</name>
   <version>0.0.0</version>
   <description>HMCL_MAV_Finite_state_machine for drone competition 2021</description>
       

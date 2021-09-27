@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(pose_fuse)
+project(map_follower)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -148,7 +148,7 @@ catkin_package(
   #LIBRARIES sitl_test
   LIBRARIES mavros
   CATKIN_DEPENDS control_toolbox eigen_conversions geometry_msgs mavros mavros_msgs mavros_extras roscpp std_msgs tf2_ros mav_msgs dynamic_reconfigure darknet_ros_msgs quadrotor_msgs
-  DEPENDS Boost 
+  DEPENDS Boost system_lib
 )
 
 
@@ -161,6 +161,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 
 include_directories(  
+  include
   ${Boost_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
@@ -174,10 +175,10 @@ include_directories(
 # )
 
 
-add_executable(pose_fuse src/pose_fuse.cpp)
-target_link_libraries(pose_fuse ${catkin_LIBRARIES})
-add_dependencies(pose_fuse pose_fuse)
-add_dependencies(pose_fuse pose_fuse_gencfg)
+add_executable(map_follower src/map_follower.cpp)
+target_link_libraries(map_follower ${catkin_LIBRARIES})
+add_dependencies(map_follower map_follower)
+add_dependencies(map_follower map_follower_gencfg)
 # install(TARGETS offb_node
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
