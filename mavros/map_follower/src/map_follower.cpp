@@ -178,16 +178,18 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
             idx_60 = front_min_idx;
         }
     /////////////////////
-    double break_point_idx = 0;
-    for( int i= idx_90; i <(int)lidar_data.ranges.size()/2; i++){
-            double thres_dist = 
-            if(fabs(lidar_data.ranges[i] - lidar_data.ranges[i+1]) > 
+    // double break_point_idx = 0;
+    // for( int i= idx_90; i <(int)lidar_data.ranges.size()/2; i++){
+    //         double thres_dist = sqrt(pow(lidar_data.ranges[i],2)+pow(lidar_data.ranges[i],2)-2*pow(lidar_data.ranges[i],2)
+                 
+    //         );
+    //         if(fabs(lidar_data.ranges[i] - lidar_data.ranges[i+1]) > 
                 
-                front_min_val > lidar_data.ranges[i]){
-                front_min_val = lidar_data.ranges[i];
-                front_min_idx = i;
-            }
-        }  
+    //             front_min_val > lidar_data.ranges[i]){
+    //             front_min_val = lidar_data.ranges[i];
+    //             front_min_idx = i;
+    //         }
+    //     }  
     /////////////////////
  
     double l_dist_b = lidar_data.ranges[idx90];
