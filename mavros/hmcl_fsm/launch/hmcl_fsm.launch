@@ -16,11 +16,23 @@
 
   <node pkg="tf" type="static_transform_publisher" name="map_to_world" args="0.0 0 0.0 0.0 0.0 0.0 map world 1"/>
   <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0.0 0 0.0 0.0 0.0 0.0 map odom 1"/>
-<node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link_virtual" args="0.0 0.0 0.1 0.0 0.0 0.0 base_link laser 1"/>
-   <node pkg="tf" type="static_transform_publisher" name="base_link_to_camera_link_virtual" args="0.147 0 -0.068 0.0 0.0 0.0 base_link camera_link_virtual 1"/>
+  <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link_virtual" args="0.0 0.0 0.1 0.0 0.0 0.0 base_link laser 1"/>
+  <node pkg="tf" type="static_transform_publisher" name="base_link_to_camera_link_virtual" args="0.147 0 -0.068 0.0 0.0 0.0 base_link camera_link_virtual 1"/>
   <node pkg="tf" type="static_transform_publisher" name="base_link_to_camera_link" args="0.0 0 0.0 -1.570975 0.0 -1.570975 camera_link_virtual camera_link 1"/> 
   
   
+  
+   <arg name="pose_fuse_config_file" default="$(find pose_fuse)/config/pose_fuse.yaml"/>
+
+  <node pkg="pose_fuse" type="pose_fuse" name="pose_fuse" output="log">
+    <!-- <remap from="/mavros/vision_pose/pose" to="vins/vision_pose/pose"/>   -->
+    <!-- <remap from="/mavros/vision_pose/pose_tmp" to="/mavros/vision_pose/pose"/>   -->
+      
+   
+    <rosparam command="load" file="$(arg pose_fuse_config_file)" />
+
+  </node>
+
   <!-- <node pkg="tf" type="static_transform_publisher" name="cam_offboard_link_broadcaster" args="0 0 0 0.0 -1.5707963 1.5707963 camera_link cam_points 100"/> -->
   <!-- <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link_virtual" args="0.0 0.0 -0.1 0.0 0.0 0.0 laser base_link 1000"/> -->
   

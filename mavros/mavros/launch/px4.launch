@@ -25,6 +25,8 @@
 		<arg name="respawn_mavros" default="$(arg respawn_mavros)" />
 		
 	</include>
+
+	
 <!-- <node pkg="tf" type="static_transform_publisher" name="cam_offboard_link_broadcaster" args="0 0 0 0.0 -1.5707963 1.5707963 camera_link cam_points 100"/> -->  
   
   <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_world" args="0.0 0 0.0 0.0 0.0 0.0 map world 10"/>

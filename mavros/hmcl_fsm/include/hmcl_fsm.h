@@ -178,6 +178,7 @@ private:
     mav_msgs::RollPitchYawrateThrust mpc_cmd;
     bool waypoint_switch_;
     bool local_avoidance_switch_;
+    bool landing_switch_;
     bool mpc_cmd_enable;
     bool avoidance_enable;
     bool local_trj_switch_, local_target_send_;
@@ -187,7 +188,8 @@ private:
     mavros_msgs::SetMode offb_set_mode;   
     mavros_msgs::CommandBool arm_cmd; 
     mavros_msgs::State current_state;    
-    mavros_msgs::PositionTarget pose_target_;
+    mavros_msgs::PositionTarget pose_target_; 
+    mavros_msgs::PositionTarget tmp_target_;
     bool pose_cmd_enable;
     geometry_msgs::Pose current_pose;
     geometry_msgs::Pose target_pose;

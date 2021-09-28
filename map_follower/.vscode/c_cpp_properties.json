@@ -1,0 +1,27 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/hojin/drone_ws2/mavros_ws/devel/include/**",
+        "/home/hojin/catkin_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/hojin/drone_ws/ctrl_ws/devel_isolated/mavlink/include/**",
+        "/home/hojin/drone_ws2/mavros_ws/src/mavros/libmavconn/include/**",
+        "/home/hojin/drone_ws2/mavros_ws/src/mavros/mav_comm/mav_msgs/include/**",
+        "/home/hojin/drone_ws2/mavros_ws/src/mavros/mav_comm/mav_planning_msgs/include/**",
+        "/home/hojin/drone_ws2/mavros_ws/src/mavros/mavros/include/**",
+        "/home/hojin/drone_ws2/mavros_ws/src/mavros/mavros_msgs/include/**",
+        "/home/hojin/drone_ws2/mavros_ws/src/mavros/offboard_ctrl/include/**",
+        "/home/hojin/drone_ws2/mavros_ws/src/mavros/quadrotor_msgs/include/**",
+        "/home/hojin/drone_ws2/mavros_ws/src/mavros/test_mavros/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}

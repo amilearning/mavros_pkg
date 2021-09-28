@@ -1,0 +1,24 @@
+<launch>
+  
+  
+  <!-- <arg name="odometry_topic" default="$(arg robot_name)/ground_truth/odometry_throttled"/> -->
+
+  
+   <arg name="map_follower_config_file" default="$(find map_follower)/config/map_follower.yaml"/>
+
+  <node pkg="map_follower" type="map_follower" name="map_follower" output="screen">
+    <!-- <remap from="/mavros/vision_pose/pose" to="vins/vision_pose/pose"/>   -->
+    <remap from="/laser/scan" to="/scan"/>  
+      <!-- <remap from="ground_truth_pose" to="/mavros/local_position/odom"/>   -->
+   
+    <rosparam command="load" file="$(arg map_follower_config_file)" />
+
+  </node>
+
+  
+  <!-- <node pkg="tf" type="static_transform_publisher" name="cam_offboard_link_broadcaster" args="0 0 0 0.0 -1.5707963 1.5707963 camera_link cam_points 100"/> -->
+  <!-- <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link_virtual" args="0.0 0.0 -0.1 0.0 0.0 0.0 laser base_link 1000"/> -->
+  
+  <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_world" args="0.0 0 0.0 0.0 0.0 0.0 map world 10"/> -->
+  
+</launch>
