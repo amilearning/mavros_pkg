@@ -143,6 +143,11 @@ private:
     ros::Subscriber local_path_trigger_sub;
 
     ros::Subscriber points_sub;
+
+    ros::Subscriber wallfollower_r_sub;
+    ros::Subscriber wallfollower_l_sub;
+
+    
     tf2_ros::Buffer tfBuffer;      
    
     tf::TransformBroadcaster tf_broadcaster;
@@ -191,14 +196,14 @@ private:
     mavros_msgs::PositionTarget pose_target_; 
     mavros_msgs::PositionTarget tmp_target_;
     bool pose_cmd_enable;
-    geometry_msgs::Pose current_pose;
+    geometry_msgs::Pose current_pose,pose_at_request;
     geometry_msgs::Pose target_pose;
     geometry_msgs::Pose global_planner_target_pose;
     geometry_msgs::Pose previous_pose;
     geometry_msgs::TransformStamped vis_pose;
-    
+    int goal_request_count;
     double current_yaw; 
-    double yaw_rate_max = 0.4;
+    double yaw_rate_max = 0.15;
     double yaw_scale = 1.0;
     double thrust_scale = 0.01;
     nav_msgs::Odometry odom_state; 
@@ -248,6 +253,8 @@ private:
     double global_pose_x_min, global_pose_x_max, global_pose_y_min, global_pose_y_max, global_pose_z_min, global_pose_z_max;
     bool verbos;
     int FSM_mode;
+    bool wall_r_follow, wall_l_follow;
+    
     
     
     // Main FSM Callback
@@ -270,6 +277,9 @@ private:
     void cmdloopCallback(const ros::TimerEvent &event);    
     void waypointTimerCallback(const ros::TimerEvent &event); 
     void multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr &msg);
+
+    void wallFollowCmdCallback_r(const mavros_msgs::PositionTargetConstPtr &msg);
+    void wallFollowCmdCallback_l(const mavros_msgs::PositionTargetConstPtr &msg);
 
     void sendManualTrajectory();
     void poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg);
