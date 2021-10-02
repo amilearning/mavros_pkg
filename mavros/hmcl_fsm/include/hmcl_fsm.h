@@ -6,10 +6,12 @@
 #include <tf/LinearMath/Matrix3x3.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_listener.h>
+#include <std_msgs/Bool.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Transform.h>
+#include <geometry_msgs/TwistStamped.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
@@ -22,6 +24,11 @@
 #include <functional>
 #include <mavros/utils.h>
 #include <mavros/mavros_plugin.h>
+
+#include <sensor_fusion_comm/InitScale.h>
+#include <mavros_msgs/CommandLong.h>
+
+
 #include <nav_msgs/Odometry.h>
 #include <mav_msgs/default_topics.h>
 #include <tf2/LinearMath/Quaternion.h>
@@ -32,6 +39,7 @@
 #include <tf2/transform_datatypes.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 #include <tf/transform_broadcaster.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 
 #include <geometry_msgs/TransformStamped.h>
@@ -131,6 +139,10 @@ private:
     ros::ServiceClient explore_client_global_planner;
     ros::ServiceClient arming_client;
     ros::ServiceClient set_mode_client;
+    ros::ServiceClient px4_reboot_client;
+    ros::ServiceClient ekf_reinit_client;
+    
+     
 
     ros::Subscriber multiDOFJointSub;
     ros::Subscriber odom_sub;   
@@ -141,6 +153,9 @@ private:
     ros::Subscriber bbx_sub; 
     ros::Subscriber pos_cmd_sub;
     ros::Subscriber local_path_trigger_sub;
+    ros::Subscriber mav_vel_sub;
+    ros::Subscriber ndt_fused_pose_sub;
+    
 
     ros::Subscriber points_sub;
 
@@ -166,9 +181,11 @@ private:
     ros::Timer waypoint_iter_timer_; 
     double waypoint_time_in_sec, waypoint_time_in_sec_prev, target_duration_time_in_sec;    
     std::deque<ros::Duration> command_waiting_times_;
-
-    ros::Timer lidar_timer_;
-    
+    int check_count = 0;
+    int pose_init_cali_succ_count; 
+    sensor_fusion_comm::InitScale ekf_init_param;
+    bool cali_done;
+    bool re_init;
     ros::Publisher rpyt_pub;
     ros::Publisher position_target_pub;
     ros::Publisher local_pos_pub;
@@ -178,12 +195,16 @@ private:
     ros::Publisher vins_odom_pub;
     ros::Publisher camera_points_pub;
     ros::Publisher local_goal_pub;
+    ros::Publisher local_avoidance_switch_pub;
+    ros::Publisher avoidance_vector_vis_pub;
     
     quadrotor_msgs::PositionCommand pose_cmd;
     mav_msgs::RollPitchYawrateThrust mpc_cmd;
+    bool manual_yaw_switch;
     bool waypoint_switch_;
     bool local_avoidance_switch_;
     bool landing_switch_;
+    bool float_control;
     bool mpc_cmd_enable;
     bool avoidance_enable;
     bool local_trj_switch_, local_target_send_;
@@ -192,6 +213,8 @@ private:
     double local_target_x_, local_target_y_;
     mavros_msgs::SetMode offb_set_mode;   
     mavros_msgs::CommandBool arm_cmd; 
+    mavros_msgs::CommandLong px4_reboot_cmd;
+    
     mavros_msgs::State current_state;    
     mavros_msgs::PositionTarget pose_target_; 
     mavros_msgs::PositionTarget tmp_target_;
@@ -200,7 +223,8 @@ private:
     geometry_msgs::Pose target_pose;
     geometry_msgs::Pose global_planner_target_pose;
     geometry_msgs::Pose previous_pose;
-    geometry_msgs::TransformStamped vis_pose;
+    geometry_msgs::TransformStamped vis_pose, ndt_fused_pose;
+    bool ndt_fused_pose_listen;
     int goal_request_count;
     double current_yaw; 
     double yaw_rate_max = 0.15;
@@ -213,6 +237,7 @@ private:
     trajectory_msgs::MultiDOFJointTrajectory waypoints;
     bool manual_trj_switch_;
     double target_x,target_y,target_z,target_yaw;
+    double lidar_final_avoidance_distance;
     
     sensor_msgs::LaserScan lidar_data;
 
@@ -245,7 +270,7 @@ private:
     
     // parameter values
     double lidar_avoidance_distance_;
-    double lidar_avoidance_move_distance_;
+    double lidar_avoidance_move_distance_, vector_avoidance_scale;
     double d0;
     double k0; 
     double lidar_min_threshold;
@@ -254,7 +279,10 @@ private:
     bool verbos;
     int FSM_mode;
     bool wall_r_follow, wall_l_follow;
+    geometry_msgs::PoseStamped avoidance_vector_display;
     
+    //
+    double mav_vel_x, mav_vel_y;
     
     
     // Main FSM Callback
@@ -269,6 +297,7 @@ private:
     
     //mainFSmode related functions
     void init_takeoff();
+    bool init_cali();
      
     // utility functions 
     double get_distance(geometry_msgs::Pose &p1,geometry_msgs::Pose &p2);
@@ -288,12 +317,15 @@ private:
    
 
     // sensors callback
-    void lidarCallback(const sensor_msgs::LaserScanConstPtr &msg);
-    void lidarTimeCallback(const ros::TimerEvent &event);
+    void lidarCallback(const sensor_msgs::LaserScanConstPtr &msg);    
     void bbxCallback(const darknet_ros_msgs::BoundingBoxesConstPtr &msg);
+    void mavVelCallback(const geometry_msgs::TwistStampedConstPtr &msg);
+
     
     
     void odom_cb(const nav_msgs::OdometryConstPtr& msg);
+    void ndt_fused_cb(const geometry_msgs::TransformStampedConstPtr& msg);
+    
     void visCallback(const geometry_msgs::PoseStampedConstPtr& msg);    
     void state_cb(const mavros_msgs::State::ConstPtr& msg);
     void check_drone_status();

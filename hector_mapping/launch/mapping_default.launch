@@ -2,9 +2,10 @@
 
 <launch>
   
-  
-  <node pkg="hector_mapping" type="hector_mapping" name="hector_height_mapping" output="screen">
-    <param name="scan_topic" value="/laser/scan" />
+  <node name="foo_throttler" type="throttle" pkg="topic_tools" args="messages /scan 1 /scan_filtered" />
+
+  <node pkg="hector_mapping" type="hector_mapping" name="hector_height_mapping" output="log">
+    <param name="scan_topic" value="/scan_filtered" />
     <param name="base_frame" value="base_link" />
     <param name="odom_frame" value="odom" />
     
@@ -21,7 +22,7 @@
     <param name="map_update_distance_thresh" value="0.0"/>
     <param name="map_update_angle_thresh" value="0.0"/>
     
-    <param name="map_resolution" value="0.1"/>
+    <param name="map_resolution" value="0.05"/>
     <param name="map_size" value="2048"/>
     <param name="map_start_x" value="0.5"/>
     <param name="map_start_y" value="0.5"/>
@@ -34,7 +35,7 @@
 
   </node>
   
-    
+      
   <!--<node pkg="tf" type="static_transform_publisher" name="map_nav_broadcaster" args="0 0 0 0 0 0 map nav 100"/>-->
 </launch>
   

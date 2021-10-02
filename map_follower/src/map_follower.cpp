@@ -11,6 +11,14 @@ mapfollower::~mapfollower() {}
 mapfollower::mapfollower(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,const ros::NodeHandle& cmd_nh, const ros::NodeHandle& lidar_nh, const ros::NodeHandle& odom_nh)
 : nh_(nh), nh_private_(nh_private), cmd_nh_(cmd_nh), lidar_nh_(lidar_nh), odom_nh_(odom_nh){     
     
+    idx_90 = 0;
+    idx_60 = 0;
+    idx_25 = 0;
+    idx25  = 0;
+    idx60  = 0;
+    idx90  = 0;
+    idx_0  = 0;
+    idx_80 = 0;
     // Dynamic Configure parameters
     f = boost::bind(&mapfollower::dyn_callback, this,_1, _2);
     server.setCallback(f);
@@ -24,11 +32,8 @@ mapfollower::mapfollower(const ros::NodeHandle& nh, const ros::NodeHandle& nh_pr
     ROS_INFO("global_pose_x_max = %f",global_pose_x_max); 
     ROS_INFO("global_pose_y_max = %f",global_pose_y_max); 
     ROS_INFO("global_pose_z_max = %f",global_pose_z_max); 
-         
     
-    
-    
-  
+     lidar_recieved = false;
     odom_received = false;
     
     lidar_sub = lidar_nh_.subscribe<sensor_msgs::LaserScan>("/laser/scan",1,&mapfollower::lidarCallback,this);    
@@ -41,12 +46,15 @@ mapfollower::mapfollower(const ros::NodeHandle& nh, const ros::NodeHandle& nh_pr
     
     position_target_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mapfollow/target/pose", 10);    
     position_target_pub_l = nh_.advertise<mavros_msgs::PositionTarget>("/mapfollow/target/pose_l", 10);    
-    
+   
     
 
 }
 
 void mapfollower::posecmdloopCallback(const ros::TimerEvent &event) {   
+    if(!lidar_recieved || !odom_received){
+        return;
+    }
     pose_target_.header.stamp = ros::Time::now();
     pose_target_.header.frame_id ='m';        
     pose_target_.coordinate_frame = 1;
@@ -57,7 +65,7 @@ void mapfollower::posecmdloopCallback(const ros::TimerEvent &event) {
     
     pose_target_.position.x = current_pose.position.x + speed_scale*forward_speed*cos(current_yaw);                             
     pose_target_.position.y = current_pose.position.y + speed_scale*forward_speed*sin(current_yaw);    
-    pose_target_.position.z = 1.0;                                 
+    pose_target_.position.z = 0.8;                                 
     pose_target_.yaw = current_yaw + delta_yaw*angle_scale;       
     
     position_target_pub.publish(pose_target_);    
@@ -117,7 +125,9 @@ double mapfollower::speed_mapping_from_angle(double angle) {
 
 
 void mapfollower::lidarTimeCallback(const ros::TimerEvent &event) {   
-        
+        if(!lidar_recieved){
+            return ;
+        }
         angle = 0.0;
         double P = kp*error;
         double D = kd*(error - prev_error)*cmd_hz;
@@ -153,28 +163,55 @@ void mapfollower::lidarTimeCallback(const ros::TimerEvent &event) {
     
 }
 
-void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
-    lidar_data = *msg; 
-
-        
-    double idx_90 = 89; 
-    double idx_60 = idx_90 + 30; 
-    double idx_25 = idx_90 + 65;    
-    double idx25 = idx_25 + 50; 
-    double idx60 = idx25 + 35;
-    double idx90 = idx25 + 65; 
+int mapfollower::find_indx_from_anglx(double angle_in_radian){
+    double input_angle;
+    input_angle = angle_in_radian;
+    angle_wrap(input_angle);
+    int found_idx = 0;
+    double cur_angle;
+    for (int i=0; i < lidar_data.ranges.size(); i++){
+        cur_angle = lidar_data.angle_min + i*lidar_data.angle_increment;
+        if(fabs(cur_angle - input_angle) <= lidar_data.angle_increment){
+          found_idx = i;  
+        }
+    }
+    if (found_idx < 0) {
+        return -1;
+    }
     
-        double front_min_val = lidar_data.range_max;
-        double front_min_idx = (int)lidar_data.ranges.size()/2-20;
-         for( int i= (int)lidar_data.ranges.size()/2-20; i <(int)lidar_data.ranges.size()/2+20; i++){
+    ROS_INFO("angle in degree %f",angle_in_radian*180/3.14195);
+    ROS_INFO("angle idx %d",found_idx);
+    return found_idx;
+}
+
+
+void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
+        lidar_data = *msg; 
+        if(!lidar_recieved){
+                 idx_90 = find_indx_from_anglx(-1*3.14195/2.0);
+                 idx_60 = find_indx_from_anglx(-1*3.14195/3.0); 
+                 idx_25 = find_indx_from_anglx(-1*3.14195/7.2);    
+                 idx25  = find_indx_from_anglx(3.14195/7.2); 
+                 idx60  = find_indx_from_anglx(3.14195/3.0);
+                 idx90  = find_indx_from_anglx(3.14195/2.0); 
+                 idx_0  = find_indx_from_anglx(0.0); 
+                 idx_80  = find_indx_from_anglx(-1*1.396422222); 
+                 lidar_recieved = true;
+                 return;
+            }   
+        
+        double front_min_val = lidar_data.range_max;        
+        int front_min_idx = idx_80;
+         for( int i= idx_80; i <idx_0; i++){
             if(front_min_val > lidar_data.ranges[i]){
                 front_min_val = lidar_data.ranges[i];
                 front_min_idx = i;
             }
         }  
-        if (front_min_val < desired_distance*2.0){
-            idx_60 = front_min_idx;
-        }
+        // if (front_min_val < desired_distance*2.0){
+        idx_60 = front_min_idx;
+        
+        // }
     /////////////////////
     // double break_point_idx = 0;
     // for( int i= idx_90; i <(int)lidar_data.ranges.size()/2; i++){

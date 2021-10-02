@@ -138,6 +138,16 @@ class mapfollower{
     double error_l, angle_l, prev_error_l, integral_l;
     double delta_yaw_l, forward_speed_l;
 
+    int idx_90;
+    int idx_60; 
+    int idx_25;    
+    int idx25; 
+    int idx60;
+    int idx90; 
+    int idx_0; 
+    int idx_80; 
+    bool lidar_recieved;
+
     double lidar_min_threshold;
     double init_takeoff_;
     double global_pose_x_min, global_pose_x_max, global_pose_y_min, global_pose_y_max, global_pose_z_min, global_pose_z_max;
@@ -160,6 +170,7 @@ class mapfollower{
     void posecmdloopCallback(const ros::TimerEvent &event);  
     void lidarTimeCallback(const ros::TimerEvent &event);  
     
+    int find_indx_from_anglx(double angle_in_radian);
     
     void odom_cb(const nav_msgs::OdometryConstPtr& msg);
    

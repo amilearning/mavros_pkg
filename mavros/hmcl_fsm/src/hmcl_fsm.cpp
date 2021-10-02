@@ -28,62 +28,59 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     
     ROS_INFO_STREAM("d0 is set to be = " << d0);
     ROS_INFO_STREAM("k0 is set to be = " << k0);
-    
+    cali_done = false;
     waypoints_itr = 0;
     odom_received = false;
     att_clb_first_callback = false;
+    ndt_fused_pose_listen = false;
+    manual_yaw_switch = false;
     
-    multiDOFJointSub = nh_.subscribe<trajectory_msgs::MultiDOFJointTrajectory>("/m100/command/trajectory",10,&hmclFSM::multiDOFJointCallback,this);            
-    bbx_sub   = nh_.subscribe<darknet_ros_msgs::BoundingBoxes>("/trt_yolo_ros/bounding_boxes", 10, &hmclFSM::bbxCallback,this);
-    pos_cmd_sub = nh_.subscribe<quadrotor_msgs::PositionCommand>("/planning/pos_cmd", 10, &hmclFSM::poseCmdCallback,this);    
-
-    wallfollower_r_sub = nh_.subscribe<mavros_msgs::PositionTarget>("/mapfollow/target/pose", 10, &hmclFSM::wallFollowCmdCallback_r,this);    
-    wallfollower_l_sub = nh_.subscribe<mavros_msgs::PositionTarget>("/mapfollow/target/pose_l", 10, &hmclFSM::wallFollowCmdCallback_l,this);    
-    
-
-
-    lidar_sub = lidar_nh_.subscribe<sensor_msgs::LaserScan>("/scan",1,&hmclFSM::lidarCallback,this);    
-    
+    lidar_sub = lidar_nh_.subscribe<sensor_msgs::LaserScan>("/scan",5,&hmclFSM::lidarCallback,this);    
+    mav_vel_sub = nh_.subscribe<geometry_msgs::TwistStamped>("/mavros/local_position/velocity_local",1,&hmclFSM::mavVelCallback,this);        
     odom_sub = odom_nh_.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom",10, &hmclFSM::odom_cb,this);  
-    state_sub = odom_nh_.subscribe<mavros_msgs::State>("mavros/state", 10, &hmclFSM::state_cb,this);
+    ndt_fused_pose_sub = odom_nh_.subscribe<geometry_msgs::TransformStamped>("/ndt_fused_pose",10, &hmclFSM::ndt_fused_cb,this);  
+    state_sub = odom_nh_.subscribe<mavros_msgs::State>("/mavros/state", 10, &hmclFSM::state_cb,this);
     vision_odom_sub = odom_nh_.subscribe<geometry_msgs::PoseStamped>("/vins/px4/pose",10, &hmclFSM::visCallback,this);    
-    
-
+   
     cmdloop_timer_ = cmd_nh_.createTimer(ros::Duration(0.02), &hmclFSM::cmdloopCallback,this); // Critical -> allocate another thread 
     if(FSM_mode == 0){
         // activate exploartion fsm
-        fsm_timer_ = fsm_nh_.createTimer(ros::Duration(0.2), &hmclFSM::mainFSMCallback,this); 
-        waypoint_iter_timer_ = nh_.createTimer(ros::Duration(0.0), &hmclFSM::waypointTimerCallback,this,false,true); 
+        fsm_timer_ = fsm_nh_.createTimer(ros::Duration(0.02), &hmclFSM::mainFSMCallback,this); 
+        // waypoint_iter_timer_ = nh_.createTimer(ros::Duration(0.0), &hmclFSM::waypointTimerCallback,this,false,true); 
+        wallfollower_r_sub = nh_.subscribe<mavros_msgs::PositionTarget>("/mapfollow/target/pose", 10, &hmclFSM::wallFollowCmdCallback_r,this);    
+        wallfollower_l_sub = nh_.subscribe<mavros_msgs::PositionTarget>("/mapfollow/target/pose_l", 10, &hmclFSM::wallFollowCmdCallback_l,this);        
+        bbx_sub   = nh_.subscribe<darknet_ros_msgs::BoundingBoxes>("/trt_yolo_ros/bounding_boxes", 10, &hmclFSM::bbxCallback,this);
+        // multiDOFJointSub = nh_.subscribe<trajectory_msgs::MultiDOFJointTrajectory>("/m100/command/trajectory",10,&hmclFSM::multiDOFJointCallback,this);            
+        // manual_trj_pub =  nh_.advertise<trajectory_msgs::MultiDOFJointTrajectory>("/command/trajectory",5);
+        // mpc_cmd_pub =  nh_.advertise<mav_msgs::RollPitchYawrateThrust>("/mavros/setpoint_raw/roll_pitch_yawrate_thrust",5);
+        // rpyt_pub = nh_.advertise<mavros_msgs::AttitudeTarget>("/mavros/setpoint_raw/attitude",10);
+
     }else if(FSM_mode ==1 ) {
         // activate local traj fsm
-        fsm_timer_ = fsm_nh_.createTimer(ros::Duration(0.1), &hmclFSM::localFSMCallback,this); 
+        fsm_timer_ = fsm_nh_.createTimer(ros::Duration(0.02), &hmclFSM::localFSMCallback,this); 
         local_path_trigger_sub = nh_.subscribe<std_msgs::Empty>("/planning/new",1,&hmclFSM::localTrajTrigCallback,this);
+        local_avoidance_switch_pub = nh_.advertise<std_msgs::Bool>("/local_avoidance_switch",1);
+        pos_cmd_sub = nh_.subscribe<quadrotor_msgs::PositionCommand>("/planning/pos_cmd", 10, &hmclFSM::poseCmdCallback,this);    
     }else{
         ROS_WARN("FSM mode is not valid");        
     }
     
-    lidar_timer_ = lidar_nh_.createTimer(ros::Duration(0.01), &hmclFSM::lidarTimeCallback,this); //Critical -> allocate another thread 
-    
-    
-    
-    // ros::Subscriber att_thrust_sub = nh.subscribe<mav_msgs::RollPitchYawrateThrust>
-    //         ("/lmpc/roll_pitch_yawrate_thrust", 10, rpyt_cb);
-    manual_trj_pub =  nh_.advertise<trajectory_msgs::MultiDOFJointTrajectory>("/command/trajectory",5);
-    mpc_cmd_pub =  nh_.advertise<mav_msgs::RollPitchYawrateThrust>("/mavros/setpoint_raw/roll_pitch_yawrate_thrust",5);
-    rpyt_pub = nh_.advertise<mavros_msgs::AttitudeTarget>("/mavros/setpoint_raw/attitude",10);
     position_target_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);    
     vis_pos_pub  =  nh_.advertise<geometry_msgs::TransformStamped>("/vins/posetransform", 10);    
     local_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
     camera_points_pub = nh_.advertise<sensor_msgs::PointCloud2>("camera_points", 2);     
     vins_odom_pub = nh_.advertise<nav_msgs::Odometry>("vins_odom", 10);
     local_goal_pub = nh_.advertise<geometry_msgs::PoseStamped>("move_base_simple/goal",1);
-    
+    avoidance_vector_vis_pub = nh_.advertise<geometry_msgs::PoseStamped>("pose_target", 1);
     
 
     
     // Define service Clients 
-    arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
-    set_mode_client = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
+    ekf_reinit_client = nh_.serviceClient<sensor_fusion_comm::InitScale>("/msf_viconpos_sensor/pose_sensor/initialize_msf_scale"); 
+    
+    arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
+    px4_reboot_client = nh_.serviceClient<mavros_msgs::CommandLong>("/mavros/cmd/command");
+    set_mode_client = nh_.serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");
     explore_client_start = nh_.serviceClient<std_srvs::Trigger>("/planner_control_interface/std_srvs/automatic_planning");
     explore_client_stop =nh_.serviceClient<std_srvs::Trigger>("/planner_control_interface/std_srvs/stop");
     explore_client_home = nh_.serviceClient<std_srvs::Trigger>("/planner_control_interface/std_srvs/homing_trigger");
@@ -97,8 +94,21 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     send_waypoint = false;
     avoidance_enable = false;
     local_trj_enable = false;
+    odom_received = false;
 
-    
+    ekf_init_param.request.scale = 1.0; 
+    px4_reboot_cmd.request.broadcast = false;
+    px4_reboot_cmd.request.command = 246;
+    px4_reboot_cmd.request.confirmation = 1;
+    px4_reboot_cmd.request.param1 = 1.0;
+
+    int check_count = 0;
+     re_init = true;   
+             
+
+        
+  
+
     //the setpoint publishing rate MUST be faster than 2Hz
     // ros::Rate rate(2); // 10 HZ
     // while(ros::ok() && !current_state.connected){
@@ -159,7 +169,78 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
 
 }
 
+bool hmclFSM::init_cali(){
+    if(!ndt_fused_pose_listen){
+          return false;    
+    }  
+    ROS_INFO("ndt_pose_available");
+    if(re_init){     
+            ROS_INFO("local pose is not available");
+            if( px4_reboot_client.call(px4_reboot_cmd)){
+                ROS_INFO("PX4 Reboot");
+                re_init = false;
+            }else{
+                ROS_WARN("px4 reboot request fail");
+                  return false;    }
+
+            ros::Duration(3.0).sleep();
+           
+                if( ekf_reinit_client.call(ekf_init_param)){ROS_INFO("ekf re-init");
+                    }else{ 
+                        ROS_INFO("ekf init fail"); 
+                          return false;    }                    
+                ros::Duration(3.0).sleep();    
+            
+    }
+    //check distance between ndt_fused_pose and mavros local position
+    double distance_between = sqrt( pow(current_pose.position.x-ndt_fused_pose.transform.translation.x,2)
+                                     +pow(current_pose.position.y-ndt_fused_pose.transform.translation.y,2)
+                                     +pow(current_pose.position.z-ndt_fused_pose.transform.translation.z,2)
+                                        );
+
+    if(distance_between<1e-1 && fabs(current_yaw) < 1e-1){
+        pose_init_cali_succ_count++;
+        ROS_INFO("correct");
+        }else{
+            pose_init_cali_succ_count = 0;
+            ROS_INFO("alignment fail");
+            }  
+
+    if(pose_init_cali_succ_count > 5){
+        ROS_INFO("cali okay!");
+        return true;
+            }    
+
+        ROS_INFO("we are calibrating");        
+        check_count++;
+        
+            ros::Duration(0.5).sleep();
+        
+        if (check_count > 40){
+            ROS_INFO("check_count = %d", check_count);
+            re_init = true;
+            check_count = 0;            
+        }
+    return false;
+}
+
+void hmclFSM::ndt_fused_cb(const geometry_msgs::TransformStampedConstPtr& msg){
+    if(!ndt_fused_pose_listen){ndt_fused_pose_listen=true;}
+    ndt_fused_pose = *msg;
+}
+
+void hmclFSM::mavVelCallback(const geometry_msgs::TwistStampedConstPtr &msg){
+    mav_vel_x = msg->twist.linear.x;
+    mav_vel_y = msg->twist.linear.y;     
+    
+}
+
 void hmclFSM::wallFollowCmdCallback_l(const mavros_msgs::PositionTargetConstPtr &msg){
+    
+    if(avoidance_enable){
+        return;
+    }
+    
     if(wall_l_follow){
         pose_target_ = *msg;        
     }
@@ -167,6 +248,10 @@ void hmclFSM::wallFollowCmdCallback_l(const mavros_msgs::PositionTargetConstPtr 
 }
 
 void hmclFSM::wallFollowCmdCallback_r(const mavros_msgs::PositionTargetConstPtr &msg){
+    if(avoidance_enable){
+        return;
+    }
+
     if(wall_r_follow){
         pose_target_ = *msg;  
     }
@@ -182,12 +267,12 @@ void hmclFSM::localTrajTrigCallback(const std_msgs::EmptyConstPtr &msg){
 void hmclFSM::load_FSM_Params(std::string group){
     nh_private_.getParam("FSM_mode",FSM_mode);
     nh_private_.getParam("verbos",verbos);
-    nh_private_.getParam("d0",d0);
-    nh_private_.getParam("k0",k0);
+    // nh_private_.getParam("d0",d0);
+    // nh_private_.getParam("k0",k0);
     nh_private_.getParam("thrust_scale",thrust_scale);
     nh_private_.getParam("manual_trj_switch",manual_trj_switch_);
     nh_private_.getParam(group+"/init_takeoff",init_takeoff_);
-    nh_private_.getParam(group+"/lidar_avoidance_distance",lidar_avoidance_distance_);
+    // nh_private_.getParam(group+"/lidar_avoidance_distance",lidar_avoidance_distance_);
     nh_private_.getParam(group+"/global_pose_x_min",global_pose_x_min);
     nh_private_.getParam(group+"/global_pose_y_min",global_pose_y_min);
     nh_private_.getParam(group+"/global_pose_z_min",global_pose_z_min);
@@ -230,6 +315,12 @@ void hmclFSM::init_takeoff(){
 void hmclFSM::localFSMCallback(const ros::TimerEvent &event){   
     // if(!armed && !offboarded) return;     
     
+    if(!cali_done){
+        cali_done = init_cali();
+        return;
+    } 
+    
+
     if(!check_if_drone_outside_global_box()){
         if(mainFSM_mode == mainFSMmode::Exploration){
             // Explore_Mode = ExploreMode::GlobalSearching;    
@@ -279,31 +370,26 @@ void hmclFSM::localFSMCallback(const ros::TimerEvent &event){
             ROS_INFO("Main = %s, Sub = %s",stateToString(mainFSM_mode),stateToString(Explore_Mode));
             previous_mode = mainFSM_mode;                              
             switch (Explore_Mode){
-                case ExploreMode::NA:                
-                ROS_INFO("Explore NA");                    
+                case ExploreMode::NA:   
                 break;  
                 
                 case ExploreMode::LocalSearching:                           
-                        // Send local target goal to local planner 
-                    ROS_INFO("initiate local planner");
-                    
+                        // Send local target goal to local planner                                    
                     if(local_path_received){
+                        std_msgs::Bool tmp_data_;
+                        tmp_data_.data = false;
+                        local_avoidance_switch_pub.publish(tmp_data_);
                         local_trj_enable = true;
-                        // local_trj_switch_ = true;
-                            
-                        ROS_INFO("local planner actiavte with cmd");                    
                         if(get_distance(pose_at_request,current_pose) < 0.05){                        
                            goal_request_count++;
                             if(goal_request_count > 10){
                                 Explore_Mode = ExploreMode::GlobalSearching; 
                             }
-                        }
-                       
+                        }                       
                     }                     
                     if(get_distance(global_planner_target_pose,current_pose) < 0.2){                                                
                         Explore_Mode = ExploreMode::GlobalSearching; // Return to local exploration planner                                  
-                    }
-                     
+                    }                     
 
                 break;  
                 
@@ -325,12 +411,10 @@ void hmclFSM::localFSMCallback(const ros::TimerEvent &event){
                         global_planner_target_pose.position.z = init_takeoff_;
                         local_goal_tmp.pose = global_planner_target_pose;                            
                         local_goal_pub.publish(local_goal_tmp);
-                        // local_target_send_ = false;        
-                        ROS_INFO("Local traject send");
+                        // local_target_send_ = false;                                
                         Explore_Mode = ExploreMode::LocalSearching;
                         }else{
-                            ROS_INFO("Pls activate local target switch to initate local planner");
-                            
+                            ROS_INFO("Pls activate local target switch to initate local planner");                            
                         }   
                 break;  
 
@@ -345,8 +429,7 @@ void hmclFSM::localFSMCallback(const ros::TimerEvent &event){
         break;
 
         case mainFSMmode::Avoidance:
-            ROS_INFO("Main = %s",stateToString(mainFSM_mode)); 
-            ROS_INFO("mainFSMmode::Avoidance = reset our goal");
+            ROS_INFO("Main = %s",stateToString(mainFSM_mode));             
             mainFSM_mode = mainFSMmode::Exploration;
             Explore_Mode = ExploreMode::GlobalSearching;
                                  
@@ -370,29 +453,28 @@ void hmclFSM::localFSMCallback(const ros::TimerEvent &event){
 
 void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){   
     // if(!armed && !offboarded) return;     
-    
+     if(!cali_done){
+        cali_done = init_cali();
+        return;
+    } 
+    return;
+
     if(!check_if_drone_outside_global_box()){
-        if(mainFSM_mode == mainFSMmode::Exploration){
-            // Explore_Mode = ExploreMode::GlobalSearching;    
-             pose_target_.position.z = init_takeoff_;  
-            ROS_INFO("Drone is outside of global box --> Global Searching activated ");         
+        if(mainFSM_mode == mainFSMmode::Exploration){            
+             pose_target_.position.z = init_takeoff_;              
         }else if(mainFSM_mode == mainFSMmode::Avoidance){
-            pose_target_.position.z = init_takeoff_;
-                ROS_INFO("Avoidance::out side of global box area");
+            pose_target_.position.z = init_takeoff_;                
         }else if(mainFSM_mode == mainFSMmode::Detection){
-            pose_target_.position.z = init_takeoff_;
-                ROS_INFO("Detection::out side of global box area");
+            pose_target_.position.z = init_takeoff_;                
         }else if(mainFSM_mode == mainFSMmode::Landing){            
-                ROS_INFO("Landing::out side of global box area");
+                pose_target_.position.z = -0.2;                
         }
-    }
-    
+    }    
     std_srvs::Trigger localsearch_srv;
     planner_msgs::pci_global plan_srv;       
     std_srvs::Trigger stop_srv;  
     std_srvs::Trigger homing_srv;
     double tmp_dist = 0.0;
-    
     
     switch (mainFSM_mode)
     {
@@ -405,18 +487,18 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
 
         case mainFSMmode::Init:       
             previous_mode = mainFSM_mode;                
-            ROS_INFO("Initializing ");
-            ROS_INFO("Main = %s",stateToString(mainFSM_mode));
+            // ROS_INFO("Initializing ");
+            // ROS_INFO("Main = %s",stateToString(mainFSM_mode));
             init_takeoff();
                 if (fabs(current_pose.position.z - init_takeoff_) < 0.1){
-                    ROS_INFO("Successful Take off");
+                    // ROS_INFO("Successful Take off");
                     mainFSM_mode = mainFSMmode::Exploration;     
                     Explore_Mode = ExploreMode::LocalSearching;                            
                 }
         break;
         
         case mainFSMmode::Exploration:
-            ROS_INFO("Main = %s, Sub = %s",stateToString(mainFSM_mode),stateToString(Explore_Mode));
+            // ROS_INFO("Main = %s, Sub = %s",stateToString(mainFSM_mode),stateToString(Explore_Mode));
             previous_mode = mainFSM_mode;                              
             switch (Explore_Mode){
                 case ExploreMode::NA:                
@@ -424,29 +506,7 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
                 break;  
                 
                 case ExploreMode::LocalSearching:                                                          
-                    if (!explore_client_start.call(localsearch_srv)) {
-                        // If we cannot get any path from local exploration planner,  let's first stop  
-                        ROS_ERROR("[MBPLANNER-UI] Service call failed: %s",explore_client_start.getService().c_str());                                                                    
-                        if (!explore_client_stop.call(stop_srv)) {
-                            ROS_ERROR("[MBPLANNER-UI] MBplanner Stop Service call failed: %s",explore_client_stop.getService().c_str());
-                            mainFSM_mode=mainFSMmode::NA; // If stop is not woking, we are moving into emergency phase.
-                            }else{ // And Change state to global searching
-                                Explore_Mode =ExploreMode::GlobalSearching;}
-                    }
-                    // tmp_dist = get_distance(previous_pose,current_pose);
-                    // if (tmp_dist < 0.2 && localsearch_count > 3){
-                    //     Explore_Mode =ExploreMode::GlobalSearching;
-                    //     if (!explore_client_stop.call(stop_srv)) {
-                    //         ROS_ERROR("[MBPLANNER-UI] MBplanner Stop Service call failed: %s",explore_client_stop.getService().c_str());
-                    //         mainFSM_mode=mainFSMmode::NA; // If stop is not woking, we are moving into emergency phase.
-                    //     }
-                    //     localsearch_count = 0;    
-                    // }
-                    // if(tmp_dist > 0.2){
-                    //     localsearch_count = 0;
-                    // }
-                    previous_pose = current_pose;
-                    localsearch_count+=1;
+                    ROS_INFO("local");
                 break;  
                 
                 case ExploreMode::GlobalSearching:     
@@ -603,6 +663,34 @@ double hmclFSM::get_distance(geometry_msgs::Pose &p1,geometry_msgs::Pose &p2){
 
 bool hmclFSM::check_if_drone_outside_global_box(){
      if(!odom_received){return true;}
+    if(pose_target_.position.x < global_pose_x_min){
+        pose_target_.position.x = global_pose_x_min+0.2;
+        return false;
+    }
+    if(pose_target_.position.x > global_pose_x_max){
+        pose_target_.position.x = global_pose_x_max-0.2;
+        return false;
+    }
+
+    if(pose_target_.position.y < global_pose_y_min){
+        pose_target_.position.y = global_pose_y_min+0.2;
+        return false;
+    }
+    if(pose_target_.position.y > global_pose_y_max){
+        pose_target_.position.y = global_pose_y_max-0.2; 
+        return false;
+    }
+
+    if(pose_target_.position.z < global_pose_z_min){
+        pose_target_.position.z = global_pose_z_min+0.1;
+        return false;
+    }
+    if(pose_target_.position.z > global_pose_z_max){
+        pose_target_.position.z = global_pose_z_max-0.1;
+        return false;
+    }
+    
+    
     if(current_pose.position.x < global_pose_x_min || current_pose.position.x > global_pose_x_max){
         return false;
     }
@@ -615,8 +703,7 @@ bool hmclFSM::check_if_drone_outside_global_box(){
     return true;
 }
 
-void hmclFSM::poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg){
-    
+void hmclFSM::poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg){    
     tmp_target_.yaw = msg->yaw;
     if (msg->yaw_dot > yaw_rate_max){
         tmp_target_.yaw_rate = yaw_rate_max;        
@@ -631,8 +718,7 @@ void hmclFSM::poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg
     }
     // ROS_INFO("pose cmd recied");
     if(manual_trj_switch_ || !local_trj_enable)
-    {   
-        ROS_INFO("local planner command ignored");
+    {           
         return;
     }
     
@@ -644,9 +730,6 @@ void hmclFSM::poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg
     pose_target_.position.x = msg->position.x; 
     pose_target_.position.y = msg->position.y; 
     pose_target_.position.z = msg->position.z; 
-
-    
-
 
     if( msg->position.z > global_pose_z_max){
          pose_target_.position.z = global_pose_z_max;
@@ -680,19 +763,24 @@ void hmclFSM::bbxCallback(const darknet_ros_msgs::BoundingBoxesConstPtr &msg){
  }
 
 void hmclFSM::dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t level) {  
+            
             d0 = config.d0;
             k0 = config.k0;
             thrust_scale = config.thrust_scale;
             lidar_min_threshold = config.lidar_min_threshold;
             lidar_avoidance_distance_ = config.lidar_avoidance_distance;
             lidar_avoidance_move_distance_ = config.lidar_avoidance_move_distance;
+            lidar_final_avoidance_distance = config.lidar_final_avoidance_distance;
             manual_trj_switch_ = config.manual_trj_switch;
+            manual_yaw_switch = config.manual_yaw_switch;
+            float_control = config.float_control;
             target_x=config.target_x;
             target_y=config.target_y;
             target_z=config.target_z;
             target_yaw = config.target_yaw;
             waypoint_switch_ = config.waypoint_switch;
             local_avoidance_switch_ = config.local_avoidance_switch;
+            vector_avoidance_scale = config.vector_avoidance_scale;
             // local_trj_switch_ = config.local_trj_switch;
             // local_target_send_ = config.local_target_send;
             local_target_x_ = config.local_target_x;
@@ -700,18 +788,18 @@ void hmclFSM::dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t le
             landing_switch_ = config.landing_switch;
             wall_r_follow = config.wall_r_follow;
             wall_l_follow = config.wall_l_follow;
-            
-            
-            // ROS_INFO("d0 = %f, k= %f, thrust_scale = %f", d0,k0,thrust_scale);            
+                    
 }
 
 
 void hmclFSM::local_avoidance(double min_distance){
-    ROS_INFO("local avoidance activated");
-    //TODO - using 2d lidar data, send avoidance manuever cmd to drone     
+    
+    std_msgs::Bool tmp_data_;
+    tmp_data_.data = true;  
+    local_avoidance_switch_pub.publish(tmp_data_);  
 	float avoidance_vector_x = 0; 
 	float avoidance_vector_y = 0;
-	bool avoid = false;	
+	bool avoid = true;	
     
     for (double angle_tmp=-3.14195; angle_tmp < 3.14195;  angle_tmp +=lidar_data.angle_increment){
         if(angle_tmp < lidar_data.angle_min || angle_tmp > lidar_data.angle_max){
@@ -729,14 +817,24 @@ void hmclFSM::local_avoidance(double min_distance){
 		{   double tmp_dist = lidar_data.ranges[i];
             if (tmp_dist > d0){
                 tmp_dist = d0;
-            }
-			avoid = true;
+            }			
 			float x = cos(lidar_data.angle_increment*i+lidar_data.angle_min);
 			float y = sin(lidar_data.angle_increment*i+lidar_data.angle_min);
 			float U = -0.5*k0*pow(((1/tmp_dist) - (1/d0)), 2);	
+            if(lidar_data.ranges[i] <= min_distance){
+                U = 10*U;
+            }
+            //////////////// ADD more VECTOR corresponds to velocity 
+            double projected_vector = mav_vel_x*x + mav_vel_y*y / 1.0;
+            projected_vector = std::max(vector_avoidance_scale,projected_vector);
+            if(projected_vector < 0){
+                projected_vector = 0.0;
+            }
+            ////////////////////////////          
+			avoidance_vector_x = avoidance_vector_x + x*U-1*x*projected_vector*vector_avoidance_scale;
+			avoidance_vector_y = avoidance_vector_y + y*U-1*y*projected_vector*vector_avoidance_scale;
 
-			avoidance_vector_x = avoidance_vector_x + x*U;
-			avoidance_vector_y = avoidance_vector_y + y*U;
+            
 		}        
 	}	
     
@@ -756,12 +854,12 @@ void hmclFSM::local_avoidance(double min_distance){
         pose_target_.header.stamp = ros::Time::now();
         pose_target_.header.frame_id ='c';    
         pose_target_.coordinate_frame = 1;       
-        if((avoidance_vector_x + current_pose.position.x)  < global_pose_x_min || (avoidance_vector_x + current_pose.position.x)  > global_pose_x_max){
-        avoidance_vector_x = 0.0;
-        }
-         if((avoidance_vector_y + current_pose.position.y)  < global_pose_y_min || (avoidance_vector_y + current_pose.position.y)  > global_pose_y_max){
-        avoidance_vector_y = 0.0;
-        }
+        // if((avoidance_vector_x + current_pose.position.x)  < global_pose_x_min || (avoidance_vector_x + current_pose.position.x)  > global_pose_x_max){
+        // avoidance_vector_x = 0.0;
+        // }
+        //  if((avoidance_vector_y + current_pose.position.y)  < global_pose_y_min || (avoidance_vector_y + current_pose.position.y)  > global_pose_y_max){
+        // avoidance_vector_y = 0.0;
+        // }
         pose_target_.position.x =  avoidance_vector_x + current_pose.position.x;        
         pose_target_.position.y =  avoidance_vector_y + current_pose.position.y;
         if(current_pose.position.z < init_takeoff_ -0.5|| current_pose.position.z > global_pose_z_max-0.5){
@@ -782,8 +880,13 @@ void hmclFSM::local_avoidance(double min_distance){
         target_pose.position.z = pose_target_.position.z;
         
         //
-        pose_target_.yaw =  tmp_target_.yaw;
-        pose_target_.yaw_rate = tmp_target_.yaw_rate;
+        if(FSM_mode ==0){
+            pose_target_.yaw =  tmp_target_.yaw;
+            pose_target_.yaw_rate = tmp_target_.yaw_rate;    
+        }
+            pose_target_.yaw =  current_yaw;
+            pose_target_.yaw_rate = 0.1;
+        
        
 
         // Disable local trajectory follower if enabled
@@ -794,9 +897,9 @@ void hmclFSM::local_avoidance(double min_distance){
         local_trj_enable = false;   
         
         
-        if(waypoints.points.size() > 0 ){
-        refine_path_via_lidarData();        
-        }          
+        // if(waypoints.points.size() > 0 ){
+        // refine_path_via_lidarData();        
+        // }          
 	}
     
     // ROS_INFO("Avoidance vector x = %f, y = %f", avoidance_vector_x, avoidance_vector_y);  
@@ -813,7 +916,7 @@ void hmclFSM::refine_path_via_lidarData(){
     command_waiting_times_.clear();
     waypoints_itr = 0;
     //TODO - refine path using the 2d lidar data && current pose     
-    ROS_INFO("trajectory has been refined");
+    
 }
 
 void hmclFSM::check_drone_status(){
@@ -832,11 +935,12 @@ void hmclFSM::check_drone_status(){
     return;
 }
 
-void hmclFSM::lidarTimeCallback(const ros::TimerEvent& e){
-    // if (mainFSM_mode == mainFSMmode::Init){
-    //     return;
-    // }
-    if (lidar_data.ranges.size() < 1){
+
+
+void hmclFSM::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
+    
+    lidar_data = *msg;  
+     if (lidar_data.ranges.size() < 1){
         return;
     }
     //If the minimum distance is less than threshold -> activate local_avoidance    
@@ -849,99 +953,73 @@ void hmclFSM::lidarTimeCallback(const ros::TimerEvent& e){
             minIndex = i;
         }                
     }
-    //Average the neighboring signals to reject any noisy signal around the minimum point
-    // int avg_half_width = 5;    
-    // double dist_tmp = -0.01;
-    // int qq = 0;
-    // for(int k = minIndex-avg_half_width; k < minIndex + avg_half_width ; k++)
-    // {   
-    //     if (k > lidar_data.ranges.size())
-    //          qq = k -lidar_data.ranges.size();
-    //     else if(k < 0)
-    //         qq = k+lidar_data.ranges.size();
-    //     else
-    //         qq = k;
-        
-    //     if (lidar_data.ranges[qq] < 100){
-    //             dist_tmp = dist_tmp + lidar_data.ranges[qq];           
-    //     }else{
-    //         dist_tmp = dist_tmp + 100;           
-    //     }
-    // }
-    //  ROS_INFO("minval = %f",minval);  
-    //  ROS_INFO("dist_tmp  = %f",dist_tmp);       
-    // if (dist_tmp < 0){ dist_tmp = 100*avg_half_width;}
-    // dist_tmp = dist_tmp / (2*avg_half_width);   
     
-    // ROS_INFO("pose_dist_tmp  = %f",dist_tmp);  
-    // ROS_INFO_STREAM("minimum distance (2d lidar) = " << dist_tmp);
-    // ROS_INFO_STREAM(" = " << lidar_avoidance_distance_);
-    if(minval < lidar_avoidance_distance_){
-        ROS_INFO("Warning!! --> Obstacles approaching");        
+    double avoidance_adhoc_vel = sqrt(pow(mav_vel_x,2)+pow(mav_vel_y,2));    
+    avoidance_adhoc_vel = std::max(avoidance_adhoc_vel,1.0);        
+    avoidance_adhoc_vel = avoidance_adhoc_vel*avoidance_adhoc_vel;
+    
+    if(minval < lidar_avoidance_distance_+avoidance_adhoc_vel*0.25){        
         mainFSM_mode = mainFSMmode::Avoidance;
-        local_avoidance(minval);                
+        local_avoidance(minval+avoidance_adhoc_vel*0.25);      
+        avoidance_enable = true;          
     }else{
         avoidance_enable = false;
         
-    }
-}
-
-void hmclFSM::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
-    lidar_data = *msg;       
+    }   
+    
 }
 
 
 
 void hmclFSM::cmdloopCallback(const ros::TimerEvent &event) {   
+    if(!cali_done){        
+        return;        
+    }
     if(landing_switch_){
         pose_target_.position.x = current_pose.position.x; 
         pose_target_.position.y = current_pose.position.y; 
         pose_target_.position.z = current_pose.position.z-0.3;   
-        position_target_pub.publish(pose_target_);   
-        ROS_INFO("emergency landing actiavted");
+        position_target_pub.publish(pose_target_);        
         return;
+    }
+
+    if(manual_yaw_switch){
+        pose_target_.header.stamp = ros::Time::now();
+        pose_target_.header.frame_id ='map';        
+        pose_target_.coordinate_frame = 1; // mavros_msgs::PositionTarget::FRAME_LOCAL_NED;            
+        pose_target_.type_mask = mavros_msgs::PositionTarget::IGNORE_AFX | mavros_msgs::PositionTarget::IGNORE_AFY | mavros_msgs::PositionTarget::IGNORE_AFZ | 
+                                mavros_msgs::PositionTarget::IGNORE_VX  | 
+                                mavros_msgs::PositionTarget::IGNORE_VY  | 
+                                mavros_msgs::PositionTarget::IGNORE_VZ;
+        // mavros_msgs::PositionTarget::IGNORE_YAW | mavros_msgs::PositionTarget::IGNORE_YAW_RATE;            
+        pose_target_.position.z = target_z;                         
+        pose_target_.yaw = target_yaw;           
+        pose_target_.yaw_rate = 0.1;
     }
 
     if(manual_trj_switch_){
         sendManualTrajectory();                
     }   
+    
+    if(float_control){
+        pose_target_.position.x = current_pose.position.x; 
+        pose_target_.position.y = current_pose.position.y; 
+    }
+
     position_target_pub.publish(pose_target_);   
-//    tf_broadcaster_.sendTransform(transformStamped_tmp); 
-  
-    // tf_broadcaster.sendTransform(tf::StampedTransform(cam_to_world_tf, ros::Time::now(), "world", "camera_link2"));
-    // try {      
-    //   tf_listener_.waitForTransform("/world", "/camera",ros::Time::now() ,ros::Duration(1.0));
-    //   tf_listener_.lookupTransform("/world", "/camera", ros::Time::now() ,cam_to_world);
-    //   cam_to_world_tf.setBasis(cam_to_world.getBasis());
-    //   cam_to_world_tf.setOrigin(cam_to_world.getOrigin());
-      
-    // } catch (tf::TransformException& ex) {
-    //         ROS_INFO("no such transform from camera to world");   
-            
-    // }  
-    
-    
-    
-    // tf_broadcaster.sendTransform(tf::StampedTransform(cam_to_world_tf, ros::Time::now(), "world", "camera_link"));
-    // ROS_INFO("~");
-    // if (avoidance_enable){
-    //     // Lidar based local avoidance activated
-    //      position_target_pub.publish(pose_target_);         
-    //      return; 
-    // }
 
+    avoidance_vector_display.header = pose_target_.header;
+    avoidance_vector_display.header.frame_id = "world";
+    avoidance_vector_display.pose.position.x = pose_target_.position.x;
+    avoidance_vector_display.pose.position.y = pose_target_.position.y;
+    avoidance_vector_display.pose.position.z = pose_target_.position.z;
+    tf2::Quaternion tmp_quat_;
+    tmp_quat_.setRPY( 0, 0, pose_target_.yaw);  // Create this quaternion from roll/pitch/yaw (in radian
+    tmp_quat_.normalize();
+    tf2::convert(tmp_quat_, avoidance_vector_display.pose.orientation);
+    avoidance_vector_vis_pub.publish(avoidance_vector_display);
 
     
-    
-    // if (mpc_cmd_enable){                
-    //     // mpc_cmd_pub.publish(mpc_cmd);
-    //     rpyt_pub.publish(att);
-        
-    //     return;
-    // }
-    
-    // position_target_pub.publish(pose_target_);  
-    // ROS_INFO("position target pub");  
      return;
 }
 
@@ -957,6 +1035,7 @@ void hmclFSM::sendManualTrajectory(){
                                 mavros_msgs::PositionTarget::IGNORE_VY  | 
                                 mavros_msgs::PositionTarget::IGNORE_VZ;
     // mavros_msgs::PositionTarget::IGNORE_YAW | mavros_msgs::PositionTarget::IGNORE_YAW_RATE;            
+    
     pose_target_.position.x = target_x;
     pose_target_.position.y = target_y;
     pose_target_.position.z = target_z;                         
@@ -1054,8 +1133,7 @@ void hmclFSM::multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajecto
                 }
                 waypoint_iter_timer_.setPeriod(command_waiting_times_.front());
                 command_waiting_times_.pop_front();
-                waypoint_iter_timer_.start();
-                ROS_WARN_STREAM("Got MultiDOFJointTrajectory message");
+                waypoint_iter_timer_.start();                
         }
         else{
             ROS_WARN_STREAM("Got MultiDOFJointTrajectory message, but message has no points.");
@@ -1096,8 +1174,7 @@ void hmclFSM::odom_cb(const nav_msgs::OdometryConstPtr& msg){
 }
 
 
-void hmclFSM::visCallback(const geometry_msgs::PoseStampedConstPtr& msg){
-    
+void hmclFSM::visCallback(const geometry_msgs::PoseStampedConstPtr& msg){    
     vis_pose.header = msg->header;
     vis_pose.header.frame_id = "world";
     vis_pose.child_frame_id = "base_link";
@@ -1120,8 +1197,7 @@ void hmclFSM::visCallback(const geometry_msgs::PoseStampedConstPtr& msg){
     vins_odom_state.pose.pose.orientation.y = msg->pose.orientation.y;
     vins_odom_state.pose.pose.orientation.z = msg->pose.orientation.z;
     vins_odom_state.pose.pose.orientation.w = msg->pose.orientation.w;
-    vins_odom_pub.publish(vins_odom_state);
-      
+    vins_odom_pub.publish(vins_odom_state);      
 }
 
 void hmclFSM::state_cb(const mavros_msgs::State::ConstPtr& msg){

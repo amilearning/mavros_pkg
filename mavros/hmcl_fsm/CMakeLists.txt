@@ -29,6 +29,7 @@ find_package(catkin REQUIRED COMPONENTS
   dynamic_reconfigure  
   darknet_ros_msgs
   quadrotor_msgs
+  sensor_fusion_comm
 )
 
 
