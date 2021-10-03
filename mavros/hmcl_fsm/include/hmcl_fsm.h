@@ -186,6 +186,9 @@ private:
     sensor_fusion_comm::InitScale ekf_init_param;
     bool cali_done;
     bool re_init;
+    int control_points;
+    int control_count_tmp;
+    bool control_points_enabled;
     ros::Publisher rpyt_pub;
     ros::Publisher position_target_pub;
     ros::Publisher local_pos_pub;
@@ -299,6 +302,7 @@ private:
     void init_takeoff();
     bool init_cali();
      
+    void angle_wrap(double &angle);
     // utility functions 
     double get_distance(geometry_msgs::Pose &p1,geometry_msgs::Pose &p2);
     void load_FSM_Params(std::string group);

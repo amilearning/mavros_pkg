@@ -248,6 +248,17 @@ void hmclFSM::wallFollowCmdCallback_l(const mavros_msgs::PositionTargetConstPtr 
 }
 
 void hmclFSM::wallFollowCmdCallback_r(const mavros_msgs::PositionTargetConstPtr &msg){
+    
+    if(control_points_enabled){
+        if(control_count_tmp > control_points){
+        return;
+        }
+        control_count_tmp++; 
+    }else{
+        control_count_tmp = 0;
+    }
+
+
     if(avoidance_enable){
         return;
     }
@@ -763,7 +774,7 @@ void hmclFSM::bbxCallback(const darknet_ros_msgs::BoundingBoxesConstPtr &msg){
  }
 
 void hmclFSM::dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t level) {  
-            
+            control_points = config.control_points;
             d0 = config.d0;
             k0 = config.k0;
             thrust_scale = config.thrust_scale;
@@ -800,12 +811,12 @@ void hmclFSM::local_avoidance(double min_distance){
 	float avoidance_vector_x = 0; 
 	float avoidance_vector_y = 0;
 	bool avoid = true;	
-    
+    bool final_avoidance_activate = false;
     for (double angle_tmp=-3.14195; angle_tmp < 3.14195;  angle_tmp +=lidar_data.angle_increment){
         if(angle_tmp < lidar_data.angle_min || angle_tmp > lidar_data.angle_max){
             float x = cos(angle_tmp);
 			float y = sin(angle_tmp);
-			float U = -0.5*k0*pow(((1/(min_distance*1.4)) - (1/d0)), 2);	
+			float U = -0.5*k0*pow(((1/(min_distance*1.2)) - (1/d0)), 2);	
 			avoidance_vector_x = avoidance_vector_x + x*U;
 			avoidance_vector_y = avoidance_vector_y + y*U;
         }            
@@ -821,8 +832,9 @@ void hmclFSM::local_avoidance(double min_distance){
 			float x = cos(lidar_data.angle_increment*i+lidar_data.angle_min);
 			float y = sin(lidar_data.angle_increment*i+lidar_data.angle_min);
 			float U = -0.5*k0*pow(((1/tmp_dist) - (1/d0)), 2);	
-            if(lidar_data.ranges[i] <= min_distance){
-                U = 10*U;
+            
+            if(lidar_data.ranges[i] <= lidar_final_avoidance_distance){
+                    final_avoidance_activate = true;
             }
             //////////////// ADD more VECTOR corresponds to velocity 
             double projected_vector = mav_vel_x*x + mav_vel_y*y / 1.0;
@@ -837,6 +849,56 @@ void hmclFSM::local_avoidance(double min_distance){
             
 		}        
 	}	
+
+//////////////////////////////////////////////////////////////////////////////
+/////////////////// if final distance actiaated -> re calculate avoidance vector 
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+if(final_avoidance_activate){
+
+            avoidance_vector_x = 0.0;
+            avoidance_vector_y = 0.0;
+
+        for (double angle_tmp=-3.14195; angle_tmp < 3.14195;  angle_tmp +=lidar_data.angle_increment){
+                if(angle_tmp < lidar_data.angle_min || angle_tmp > lidar_data.angle_max){
+                    float x = cos(angle_tmp);
+                    float y = sin(angle_tmp);
+                    float U = -0.5*k0*pow(((1/(min_distance*1.2)) - (1/d0)), 2);	
+                    avoidance_vector_x = avoidance_vector_x + x*U;
+                    avoidance_vector_y = avoidance_vector_y + y*U;
+                }            
+            }
+
+    for(int i=0; i<lidar_data.ranges.size(); i++)
+        {    
+            if( lidar_data.ranges[i] > lidar_min_threshold)
+            {   double tmp_dist = lidar_data.ranges[i];
+                if (tmp_dist > d0){
+                    tmp_dist = d0;
+                }			
+                float x = cos(lidar_data.angle_increment*i+lidar_data.angle_min);
+                float y = sin(lidar_data.angle_increment*i+lidar_data.angle_min);
+                float U = -0.5*k0*pow(((1/tmp_dist) - (1/d0)), 2);	
+                
+                if(lidar_data.ranges[i] <= lidar_final_avoidance_distance*sqrt(2)+0.05 ){
+                        U = 5*U;
+                }
+                //////////////// ADD more VECTOR corresponds to velocity 
+                double projected_vector = mav_vel_x*x + mav_vel_y*y / 1.0;
+                projected_vector = std::max(vector_avoidance_scale,projected_vector);
+                if(projected_vector < 0){
+                    projected_vector = 0.0;
+                }
+                ////////////////////////////          
+                avoidance_vector_x = avoidance_vector_x + x*U-1*x*projected_vector*vector_avoidance_scale;
+                avoidance_vector_y = avoidance_vector_y + y*U-1*y*projected_vector*vector_avoidance_scale;
+            }        
+        }	
+
+}
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
     
 	avoidance_vector_x = avoidance_vector_x*cos(current_yaw) - avoidance_vector_y*sin(current_yaw);
 	avoidance_vector_y = avoidance_vector_x*sin(current_yaw) + avoidance_vector_y*cos(current_yaw);
@@ -879,13 +941,30 @@ void hmclFSM::local_avoidance(double min_distance){
         target_pose.position.y = pose_target_.position.y;
         target_pose.position.z = pose_target_.position.z;
         
-        //
-        if(FSM_mode ==0){
+        double angle_to_avoidance = atan2(avoidance_vector_y,avoidance_vector_x);
+        angle_wrap(angle_to_avoidance);
+            
+        
+        if(FSM_mode ==1){          
+
             pose_target_.yaw =  tmp_target_.yaw;
             pose_target_.yaw_rate = tmp_target_.yaw_rate;    
+        }else{
+            
+            double angle_increment_tmp_ =0.1;
+            if(final_avoidance_activate){
+                angle_increment_tmp_ +=0.05;
+            }
+            if( angle_to_avoidance < lidar_data.angle_min){
+                pose_target_.yaw = current_yaw-angle_increment_tmp_;
+            }else if(angle_to_avoidance > lidar_data.angle_max){
+                pose_target_.yaw = current_yaw+angle_increment_tmp_;
+            }else{
+                 pose_target_.yaw =  current_yaw;
+            }
+            pose_target_.yaw_rate = 0.15;
         }
-            pose_target_.yaw =  current_yaw;
-            pose_target_.yaw_rate = 0.1;
+           
         
        
 
@@ -909,6 +988,14 @@ void hmclFSM::local_avoidance(double min_distance){
     
 }
 
+void hmclFSM::angle_wrap(double &angle){
+    while (angle < -M_PI) {
+        angle += 2 * M_PI;
+        }
+        while (angle > M_PI) {
+        angle -= 2 * M_PI;
+        }
+}
 
 void hmclFSM::refine_path_via_lidarData(){
     // delete below as this is for lidar testing
@@ -971,7 +1058,9 @@ void hmclFSM::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
 
 
 
-void hmclFSM::cmdloopCallback(const ros::TimerEvent &event) {   
+void hmclFSM::cmdloopCallback(const ros::TimerEvent &event) {  
+    
+    
     if(!cali_done){        
         return;        
     }

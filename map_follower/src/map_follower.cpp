@@ -101,6 +101,7 @@ void mapfollower::angle_wrap(double &angle){
         angle -= 2 * M_PI;
         }
 }
+
 void mapfollower::minmaxcast(double &value,double min, double max){
     if( value <= min){
         value = min;
