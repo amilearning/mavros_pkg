@@ -236,7 +236,9 @@ void hmclFSM::mavVelCallback(const geometry_msgs::TwistStampedConstPtr &msg){
 }
 
 void hmclFSM::wallFollowCmdCallback_l(const mavros_msgs::PositionTargetConstPtr &msg){
-    
+  
+
+
     if(avoidance_enable){
         return;
     }
@@ -804,7 +806,8 @@ void hmclFSM::dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t le
 
 
 void hmclFSM::local_avoidance(double min_distance){
-    
+    ROS_INFO("local avoidance activated");
+    ROS_INFO("local activation distance =  %f",min_distance);
     std_msgs::Bool tmp_data_;
     tmp_data_.data = true;  
     local_avoidance_switch_pub.publish(tmp_data_);  
@@ -951,7 +954,7 @@ if(final_avoidance_activate){
             pose_target_.yaw_rate = tmp_target_.yaw_rate;    
         }else{
             
-            double angle_increment_tmp_ =0.1;
+            double angle_increment_tmp_ =0.12;
             if(final_avoidance_activate){
                 angle_increment_tmp_ +=0.05;
             }
@@ -962,7 +965,7 @@ if(final_avoidance_activate){
             }else{
                  pose_target_.yaw =  current_yaw;
             }
-            pose_target_.yaw_rate = 0.15;
+            pose_target_.yaw_rate = 0.18;
         }
            
         
@@ -1045,6 +1048,8 @@ void hmclFSM::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
     avoidance_adhoc_vel = std::max(avoidance_adhoc_vel,1.0);        
     avoidance_adhoc_vel = avoidance_adhoc_vel*avoidance_adhoc_vel;
     
+    avoidance_adhoc_vel = 0.0;
+
     if(minval < lidar_avoidance_distance_+avoidance_adhoc_vel*0.25){        
         mainFSM_mode = mainFSMmode::Avoidance;
         local_avoidance(minval+avoidance_adhoc_vel*0.25);      

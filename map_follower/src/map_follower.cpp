@@ -197,21 +197,49 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
                  idx90  = find_indx_from_anglx(3.14195/2.0); 
                  idx_0  = find_indx_from_anglx(0.0); 
                  idx_80  = find_indx_from_anglx(-1*1.396422222); 
+                 idx_45  = find_indx_from_anglx(-1*3.14195 / 4.0); 
+                  
                  lidar_recieved = true;
                  return;
             }   
         
         double front_min_val = lidar_data.range_max;        
-        int front_min_idx = idx_80;
-         for( int i= idx_80; i <idx_0; i++){
-            if(front_min_val > lidar_data.ranges[i]){
-                front_min_val = lidar_data.ranges[i];
-                front_min_idx = i;
-            }
-        }  
+        int front_min_idx = idx_60;
+        bool face_free_space = true;
+         for( int i= idx_60; i <idx_0; i++){             
+             if( i <  idx_45){
+                 if ( lidar_data.ranges[i] < desired_distance ){
+                     continue; 
+                 }else{
+                     if(front_min_val > lidar_data.ranges[i]){
+                        front_min_val = lidar_data.ranges[i];
+                        front_min_idx = i; 
+                     }
+                 }
+                 if(lidar_data.ranges[i] < desired_distance*3.0){
+                        face_free_space = false;
+                 }
+             }else{ // 0 ~ -45
+                if(lidar_data.ranges[i] > desired_distance*3.0){
+                    continue;
+                }else{
+                    face_free_space = false;                    
+                }
+                if(front_min_val > lidar_data.ranges[i]){
+                        front_min_val = lidar_data.ranges[i];
+                        front_min_idx = i; 
+                     }
+             }
+        }
+        
+        if(face_free_space){
+          front_min_idx = idx_80;  
+        }
+        
+
         // if (front_min_val < desired_distance*2.0){
         idx_60 = front_min_idx;
-        
+     
         // }
     /////////////////////
     // double break_point_idx = 0;

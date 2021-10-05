@@ -22,13 +22,13 @@
     <param name="map_update_distance_thresh" value="0.0"/>
     <param name="map_update_angle_thresh" value="0.0"/>
     
-    <param name="map_resolution" value="0.05"/>
+    <param name="map_resolution" value="0.2"/>
     <param name="map_size" value="2048"/>
     <param name="map_start_x" value="0.5"/>
     <param name="map_start_y" value="0.5"/>
     
-    <param name="laser_min_dist" value="0.4" />
-    <param name="laser_max_dist" value="8.0" />
+    <param name="laser_min_dist" value="0.8" />
+    <param name="laser_max_dist" value="6.0" />
     <param name="laser_z_min_value" value="-1"/>
     <param name="laser_z_max_value" value="2.1"/>
 

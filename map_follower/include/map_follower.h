@@ -146,6 +146,7 @@ class mapfollower{
     int idx90; 
     int idx_0; 
     int idx_80; 
+    int idx_45;
     bool lidar_recieved;
 
     double lidar_min_threshold;

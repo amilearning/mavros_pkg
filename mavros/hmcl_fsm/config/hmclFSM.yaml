@@ -8,7 +8,7 @@ fsm:
   global_pose_y_max: 30.8
   global_pose_z_max: 1.9
 
-FSM_mode: 0
+FSM_mode: 1
 thrust_scale: 0.035
 manual_trj_switch: false
 target_x: 0.0
