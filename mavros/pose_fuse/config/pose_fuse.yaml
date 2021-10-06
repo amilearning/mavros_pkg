@@ -1,5 +1,5 @@
 pf:
-  init_takeoff: 1.5
+  init_takeoff: 1.0
   lidar_avoidance_distance: 2.0
   global_pose_x_min: -100.0
   global_pose_y_min: -100.0
