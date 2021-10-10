@@ -147,6 +147,7 @@ private:
     ros::Subscriber odom_sub;   
     ros::Subscriber vision_odom_sub;
     ros::Subscriber battery_state_sub;
+    ros::Subscriber state_sub;
     ros::Subscriber lidar_sub;
     ros::Subscriber mpcCommand_sub;
     ros::Subscriber bbx_sub; 
@@ -175,6 +176,9 @@ private:
 
     sensor_msgs::PointCloud2 cloud_in, cloud_out;
 
+    
+    
+    
     ros::Timer fsm_timer_;
     ros::Timer cmdloop_timer_;
     ros::Timer waypoint_iter_timer_; 
@@ -258,7 +262,7 @@ private:
     bool send_waypoint;
     float global_planner_target_x, global_planner_target_y, global_planner_target_z;
     //switch varialbes 
-    
+    bool armed;
     bool offboarded;
     bool odom_received;
    
@@ -323,9 +327,9 @@ private:
     //////////////////////////////////////////////////////////
     //
     double mav_vel_x, mav_vel_y;
-    
+    bool offboard_and_arm();
     void check_emergency_landing();
-
+    void state_cb(const mavros_msgs::State::ConstPtr& msg);
     // Main FSM Callback
     void mainFSMCallback(const ros::TimerEvent &event);        
     void printFSMstate();

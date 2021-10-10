@@ -59,7 +59,7 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     vins_odom_pub = nh_.advertise<nav_msgs::Odometry>("vins_odom", 10);
     local_goal_pub = nh_.advertise<geometry_msgs::PoseStamped>("move_base_simple/goal",1);
     avoidance_vector_vis_pub = nh_.advertise<geometry_msgs::PoseStamped>("pose_target", 1);
-    
+    state_sub = nh_.subscribe<mavros_msgs::State>("mavros/state", 10, &hmclFSM::state_cb,this);
     // Define service Clients 
     ekf_reinit_client = nh_.serviceClient<sensor_fusion_comm::InitScale>("/msf_viconpos_sensor/pose_sensor/initialize_msf_scale");     
     arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
@@ -86,7 +86,9 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     px4_kill_cmd.request.confirmation = 1;
     px4_kill_cmd.request.param1 = 0.0;
     px4_kill_cmd.request.param2 = 21196.0;
-    
+
+    armed = false;
+    offboarded = false;
 
 
     int check_count = 0;
@@ -103,6 +105,37 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     RTB_mode = RTBmode::Init;
    
 
+}
+
+void hmclFSM::state_cb(const mavros_msgs::State::ConstPtr& msg){
+    current_state = *msg;
+}
+
+bool hmclFSM::offboard_and_arm(){      
+        if( current_state.mode != "OFFBOARD" && (ros::Time::now() - last_request > ros::Duration(1.0)))
+                {                    
+                    if( set_mode_client.call(offb_set_mode) ){
+                        ROS_INFO("Offboard enabled");
+                        offboarded = true;}
+                    last_request = ros::Time::now();
+                } else {          
+                    if( !current_state.armed && (ros::Time::now() - last_request > ros::Duration(1.0))){
+                        // if( arming_client.call(arm_cmd) && arm_cmd.response.success){ROS_INFO("Vehicle armed");}
+                        if( arming_client.call(arm_cmd)){
+                            ROS_INFO("Vehicle armed");
+                            armed = true;                            
+                            }else{
+                            ROS_INFO("arm failed");
+                            }
+                        last_request = ros::Time::now();
+                    }
+                }
+        if(offboarded && armed)
+        { return true; }
+        else{
+            return false;
+        }                
+   
 }
 
 bool hmclFSM::init_cali(){
@@ -347,8 +380,7 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
     
 
     if(rtb && !rtb_once && odom_received){
-        if(wp_x.size() >= 0){
-            ROS_INFO("RRTB activated!!!!!!!!!!!!!!!!!");
+        if(wp_x.size() >= 0){            
         mainFSM_mode = mainFSMmode::RTB; 
         RTB_mode = RTBmode::Init;        
         wp_x.push_back(current_x);
@@ -367,14 +399,12 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
     {
         case mainFSMmode::Init:                                             
             init_takeoff();
-                if(init_count > 100){
-                    ROS_INFO("move to next exploration step");
+                if(init_count > 100){                    
                     mainFSM_mode = mainFSMmode::Exploration;     
                     Explore_Mode = ExploreMode::LocalSearching;   
                 }
                 if (fabs(current_pose.position.z - init_takeoff_) < 0.05){     
-                    init_count ++; 
-                    ROS_INFO("count up");                     
+                    init_count ++;                                       
                 }else{
                   mainFSM_mode = mainFSMmode::Init;  
                 }
