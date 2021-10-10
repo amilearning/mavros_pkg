@@ -17,6 +17,7 @@
 #include <mavros_msgs/State.h>
 #include <mavros_msgs/PositionTarget.h>
 #include <mavros_msgs/AttitudeTarget.h>
+#include <sensor_msgs/BatteryState.h>
 #include <quadrotor_msgs/PositionCommand.h>
 #include <mav_msgs/RollPitchYawrateThrust.h>
 // #include <mavros/setpoint_mixin.h>
@@ -62,23 +63,35 @@
 
 
 
-enum struct mainFSMmode {NA = 0, Init = 1, Exploration = 2, Avoidance = 3, Detection = 4, Landing = 5};    
-enum struct ExploreMode {NA = 0, LocalSearching = 1, GlobalSearching = 2, Homing = 3};        
-enum struct DetectMode {NA = 0,Filter = 1, Register = 2};    
-enum struct LandMode {NA = 0, LookingHelipad = 1, HomeApproach = 2, TargetApproach = 3, Landing = 4, Takeoff = 5};    
-    
+enum struct mainFSMmode {Init = 0, Exploration = 1, Avoidance = 2, Landing = 3, RTB = 4};    
+enum struct ExploreMode {LocalSearching = 0, GlobalSearching = 1};        
+enum struct LandMode {NearHome = 0, MovetoHome = 1, Landing = 2};    
+enum struct RTBmode {Init = 0, Search = 1, YawAglign = 2, Move = 3, Init_yaw = 4, MoveNear =5};        
 
+
+
+inline const char* stateToString(RTBmode v)
+{
+    switch (v)
+    {
+        case RTBmode::Init:   return "Init";
+        case RTBmode::Search:   return "Search";
+        case RTBmode::YawAglign: return "YawAglign";
+        case RTBmode::Move: return "Move";        
+        case RTBmode::Init_yaw: return "Init_yaw";  
+        case RTBmode::MoveNear: return "MoveNear";          
+        default:      return "[Unknown mainFSMmode]";
+    }
+}
 
 
 inline const char* stateToString(mainFSMmode v)
 {
     switch (v)
-    {
-        case mainFSMmode::NA:   return "NA";
+    {        
         case mainFSMmode::Init:   return "Init";
         case mainFSMmode::Exploration: return "Exploration";
-        case mainFSMmode::Avoidance: return "Avoidance";
-        case mainFSMmode::Detection: return "Detection";
+        case mainFSMmode::Avoidance: return "Avoidance";        
         case mainFSMmode::Landing: return "Landing";
         default:      return "[Unknown mainFSMmode]";
     }
@@ -87,36 +100,22 @@ inline const char* stateToString(mainFSMmode v)
 inline const char* stateToString(ExploreMode v)
 {
     switch (v)
-    {
-        case ExploreMode::NA:   return "NA";
+    {        
         case ExploreMode::LocalSearching:   return "LocalSearching";
-        case ExploreMode::GlobalSearching: return "GlobalSearching";
-        case ExploreMode::Homing: return "Homing";        
+        case ExploreMode::GlobalSearching: return "GlobalSearching";               
         default:      return "[Unknown ExploreMode]";
     }
 }
 
-inline const char* stateToString(DetectMode v)
-{
-    switch (v)
-    {
-        case DetectMode::NA:   return "NA";
-        case DetectMode::Filter:   return "Filter";
-        case DetectMode::Register: return "Register";
-        default:      return "[Unknown DetectMode]";
-    }
-}
+
 
 inline const char* stateToString(LandMode v)
 {
     switch (v)
-    {
-        case LandMode::NA:   return "NA";
-        case LandMode::LookingHelipad:   return "LookingHelipad";
-        case LandMode::HomeApproach: return "HomeApproach";
-        case LandMode::TargetApproach: return "TargetApproach";
-        case LandMode::Landing: return "Landing";
-        case LandMode::Takeoff: return "Takeoff";
+    {        
+        case LandMode::NearHome:   return "NearHome";
+        case LandMode::MovetoHome: return "MovetoHome";
+        case LandMode::Landing: return "Landing";        
         default:      return "[Unknown LandMode]";
     }
 }
@@ -139,7 +138,7 @@ private:
     ros::ServiceClient explore_client_global_planner;
     ros::ServiceClient arming_client;
     ros::ServiceClient set_mode_client;
-    ros::ServiceClient px4_reboot_client;
+    ros::ServiceClient px4_cmd_client;
     ros::ServiceClient ekf_reinit_client;
     
      
@@ -147,7 +146,7 @@ private:
     ros::Subscriber multiDOFJointSub;
     ros::Subscriber odom_sub;   
     ros::Subscriber vision_odom_sub;
-    ros::Subscriber state_sub;
+    ros::Subscriber battery_state_sub;
     ros::Subscriber lidar_sub;
     ros::Subscriber mpcCommand_sub;
     ros::Subscriber bbx_sub; 
@@ -186,9 +185,9 @@ private:
     sensor_fusion_comm::InitScale ekf_init_param;
     bool cali_done;
     bool re_init;
-    int control_points;
+    
     int control_count_tmp;
-    bool control_points_enabled;
+    int init_count;
     ros::Publisher rpyt_pub;
     ros::Publisher position_target_pub;
     ros::Publisher local_pos_pub;
@@ -203,22 +202,24 @@ private:
     
     quadrotor_msgs::PositionCommand pose_cmd;
     mav_msgs::RollPitchYawrateThrust mpc_cmd;
-    bool manual_yaw_switch;
-    bool waypoint_switch_;
-    bool local_avoidance_switch_;
-    bool landing_switch_;
-    bool float_control;
+    
+    
+    
+    
+    
     bool mpc_cmd_enable;
     bool avoidance_enable;
     bool local_trj_switch_, local_target_send_;
     bool local_trj_enable;
     bool local_path_received;
-    double local_target_x_, local_target_y_;
+    
     mavros_msgs::SetMode offb_set_mode;   
     mavros_msgs::CommandBool arm_cmd; 
     mavros_msgs::CommandLong px4_reboot_cmd;
+    mavros_msgs::CommandLong px4_kill_cmd;
+    mavros_msgs::CommandLong px4_landinggear_cmd;
     
-    mavros_msgs::State current_state;    
+    double current_battery;    
     mavros_msgs::PositionTarget pose_target_; 
     mavros_msgs::PositionTarget tmp_target_;
     bool pose_cmd_enable;
@@ -230,9 +231,8 @@ private:
     bool ndt_fused_pose_listen;
     int goal_request_count;
     double current_yaw; 
-    double yaw_rate_max = 0.15;
+    double yaw_rate_max = 0.35;
     double yaw_scale = 1.0;
-    double thrust_scale = 0.01;
     nav_msgs::Odometry odom_state; 
     nav_msgs::Odometry vins_odom_state; 
 
@@ -252,24 +252,26 @@ private:
     dynamic_reconfigure::Server<hmcl_fsm::dyn_paramsConfig>::CallbackType f;
     
     
-    darknet_ros_msgs::BoundingBoxes detected_bbx;
+    
 
     int waypoints_itr;
     bool send_waypoint;
     float global_planner_target_x, global_planner_target_y, global_planner_target_z;
     //switch varialbes 
-    bool armed;
+    
     bool offboarded;
     bool odom_received;
    
 
     // State machine variables
-     mainFSMmode mainFSM_mode;   
-     mainFSMmode previous_mode;  
+     mainFSMmode mainFSM_mode, prev_mainFSM_mode;   
+    //  mainFSMmode previous_mode;  
+     RTBmode    RTB_mode;
      ExploreMode Explore_Mode;     
-     DetectMode Detect_Mode;
+     
      LandMode Land_Mode;
      int localsearch_count;
+    
     
     // parameter values
     double lidar_avoidance_distance_;
@@ -283,11 +285,47 @@ private:
     int FSM_mode;
     bool wall_r_follow, wall_l_follow;
     geometry_msgs::PoseStamped avoidance_vector_display;
+    double battery_thres;
     
+    //////////////////////Landing //////////////////////////
+
+
+    bool landing;
+
+
+
+
+
+
+
+
+    //////////////////////////////////////////////////
+    //////////////////////////// RTB //////////////////////////
+    double total_run_distance;
+    double x_check, y_check, x_dc, y_dc ;
+    bool rtb;
+    bool rtb_once;
+    int current_min_idx, prev_min_idx;
+    std::vector<float> wp_x, wp_y;
+    double current_x, current_y;
+    double safe_distance;     
+    double prev_wp_yaw; 
+
+    double A_sw= 45.0/180.0*M_PI;        // Angle threshold for STORE_WP
+    double D_sw= 1;                      // Distance threshold for STORE_WP
+    double D_sp= 0.2;                    // Distance threshold for judge sepoint arrival
+
+    void check_rtb_init();
+    void STORE_WP();
+    bool CHECK_CLEARANCE_AVOIDANCE(int lidar_idx_c, double expected);
+    int get_closest_wp_idx();
+    int get_safe_wp_idx();
+    //////////////////////////////////////////////////////////
     //
     double mav_vel_x, mav_vel_y;
     
-    
+    void check_emergency_landing();
+
     // Main FSM Callback
     void mainFSMCallback(const ros::TimerEvent &event);        
     void printFSMstate();
@@ -308,8 +346,8 @@ private:
     void load_FSM_Params(std::string group);
     // control related callback
     void cmdloopCallback(const ros::TimerEvent &event);    
-    void waypointTimerCallback(const ros::TimerEvent &event); 
-    void multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr &msg);
+    
+    
 
     void wallFollowCmdCallback_r(const mavros_msgs::PositionTargetConstPtr &msg);
     void wallFollowCmdCallback_l(const mavros_msgs::PositionTargetConstPtr &msg);
@@ -322,8 +360,7 @@ private:
 
     // sensors callback
     void lidarCallback(const sensor_msgs::LaserScanConstPtr &msg);    
-    void bbxCallback(const darknet_ros_msgs::BoundingBoxesConstPtr &msg);
-    void mavVelCallback(const geometry_msgs::TwistStampedConstPtr &msg);
+    
 
     
     
@@ -331,10 +368,9 @@ private:
     void ndt_fused_cb(const geometry_msgs::TransformStampedConstPtr& msg);
     
     void visCallback(const geometry_msgs::PoseStampedConstPtr& msg);    
-    void state_cb(const mavros_msgs::State::ConstPtr& msg);
-    void check_drone_status();
-    void local_avoidance(double min_distance);
-    void refine_path_via_lidarData();
+    void battery_state_cb(const sensor_msgs::BatteryStateConstPtr& msg);
+    
+    void local_avoidance(double min_distance);    
     
     void dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t level);
     

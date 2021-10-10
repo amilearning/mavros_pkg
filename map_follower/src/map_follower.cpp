@@ -115,13 +115,13 @@ double mapfollower::speed_mapping_from_angle(double angle) {
     if (fabs(angle) >= 0.0 && fabs(angle) < 0.2){
             return 0.4;
     }else if(fabs(angle) >= 0.2 && fabs(angle) < 0.4 ){
-                return 0.3;
+                return 0.35;
     }else if(fabs(angle) >= 0.4 && fabs(angle) < 0.5 ){
-                return 0.2;
+                return 0.3;
     }else if(fabs(angle) >= 0.5 && fabs(angle) < max_angle ){
-                return 0.05;
+                return 0.25;
     }    
-    return 0.1;  
+    return 0.15;  
 }
 
 
@@ -203,33 +203,111 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
                  return;
             }   
         
+
+
+        /////////////////////// 
+        double min_80_60 = 1e2;
+        int min_80_60_idx = idx_80;
+        double max_80_60 = 0;
+        int max_80_60_idx = idx_60;
+        for( int i= idx_80; i < idx_60; i++){
+            if(min_80_60 > lidar_data.ranges[i]){
+                min_80_60 = lidar_data.ranges[i];
+                min_80_60_idx = i;
+            }
+            if(max_80_60 < lidar_data.ranges[i]){
+                max_80_60 = lidar_data.ranges[i];
+                max_80_60_idx = i;
+            }
+        }
+
+        double min_60_45 = 1e2;
+        int min_60_45_idx = idx_60;
+        double max_60_45 = 0;
+        int max_60_45_idx = idx_45;
+        for( int i= idx_60; i < idx_45; i++){
+            if(min_60_45 > lidar_data.ranges[i]){
+                min_60_45 = lidar_data.ranges[i];
+                min_60_45_idx = i;
+            }
+            if(max_60_45 < lidar_data.ranges[i]){
+                max_60_45 = lidar_data.ranges[i];
+                max_60_45_idx = i;
+            }
+        }
+
+        double min_45_0 = 1e2;
+        int min_45_0_idx = idx_45;
+        double max_45_0 = 0;
+        int max_45_0_idx = idx_0;
+        for( int i= idx_45; i < idx_0; i++){
+            if(min_45_0 > lidar_data.ranges[i]){
+                min_45_0 = lidar_data.ranges[i];
+                min_45_0_idx = i;
+            }
+            if(max_45_0 < lidar_data.ranges[i]){
+                max_45_0 = lidar_data.ranges[i];
+                max_45_0_idx = i;
+            }
+        }
+
+        if(min_80_60)
+
+        
+            
+
+        min_45_0
+        max_45_0
+
+        min_60_45
+        max_60_45
+
+        min_80_60
+        max_80_60
+
+
+        ///////////////////////
+
         double front_min_val = lidar_data.range_max;        
-        int front_min_idx = idx_60;
+       
+        int front_right_min_idx = idx_60;
+        int front_right_max_idx = idx_60;
         bool face_free_space = true;
-         for( int i= idx_60; i <idx_0; i++){             
-             if( i <  idx_45){
-                 if ( lidar_data.ranges[i] < desired_distance ){
-                     continue; 
-                 }else{
-                     if(front_min_val > lidar_data.ranges[i]){
+         for( int i= idx_60; i <idx_45; i++){              
+                 // 45 ~60
+                 if ( lidar_data.ranges[i] > desired_distance){                     
+                        if(front_min_val > lidar_data.ranges[i]){
+                            front_min_val = lidar_data.ranges[i];
+                            front_right_min_idx = i;                    
+                    }       
+                 }                      
+        }
+
+        double front_min_idx = front_right_min_idx;
+        for( int i= idx_45; i <idx_0; i++){               
+              // 0 ~ -45                
+                if(front_min_val*2 > lidar_data.ranges[i]){
                         front_min_val = lidar_data.ranges[i];
                         front_min_idx = i; 
-                     }
-                 }
-                 if(lidar_data.ranges[i] < desired_distance*3.0){
-                        face_free_space = false;
-                 }
-             }else{ // 0 ~ -45
-                if(lidar_data.ranges[i] > desired_distance*3.0){
-                    continue;
-                }else{
-                    face_free_space = false;                    
                 }
-                if(front_min_val > lidar_data.ranges[i]){
-                        front_min_val = lidar_data.ranges[i];
-                        front_min_idx = i; 
-                     }
-             }
+                // if( lidar_data.ranges[i] < desired_distance*2){
+                //     front_min_val = lidar_data.ranges[i];
+                //     front_min_idx = i;
+                // }
+            
+        }
+
+        
+        double right_max_val = lidar_data.range_min;    
+        int right_max_idx = idx_80;
+        for(int i=idx_80;i<idx_60; i++){
+            if( right_max_val < lidar_data.ranges[i]){
+                right_max_val = lidar_data.ranges[i];
+                right_max_idx = i;
+            }
+        }
+        if(right_max_val > desired_distance*2){
+           front_min_idx = idx_80;
         }
         
         if(face_free_space){
@@ -237,9 +315,9 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
         }
         
 
-        // if (front_min_val < desired_distance*2.0){
+        
         idx_60 = front_min_idx;
-     
+        // idx_60 = idx_60;
         // }
     /////////////////////
     // double break_point_idx = 0;

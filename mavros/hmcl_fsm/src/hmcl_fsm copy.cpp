@@ -186,9 +186,7 @@ void hmclFSM::load_FSM_Params(std::string group){
     nh_private_.getParam("verbos",verbos);
     nh_private_.getParam("total_run_distance",total_run_distance);   
     nh_private_.getParam("safe_distance",safe_distance);   
-    nh_private_.getParam("D_sp",D_sp); 
-    nh_private_.getParam("battery_thres",battery_thres); 
-    
+    nh_private_.getParam("D_sp",D_sp);   
      
     // nh_private_.getParam("d0",d0);
     // nh_private_.getParam("k0",k0);    
@@ -367,7 +365,7 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
     {
         case mainFSMmode::Init:                                             
             init_takeoff();
-                if(init_count > 100){
+                if(init_count > 200){
                     ROS_INFO("move to next exploration step");
                     mainFSM_mode = mainFSMmode::Exploration;     
                     Explore_Mode = ExploreMode::LocalSearching;   
@@ -413,8 +411,8 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
                     else if(RTB_mode == RTBmode::YawAglign){                                       
                         RTB_mode = RTBmode::Search; 
                     }
-                    else if(RTB_mode ==RTBmode::MoveNear){
-                        RTB_mode = RTBmode::MoveNear;
+                    else if(RTB_mode ==RTBmode::Movenear){
+                        RTB_mode = RTBmode::Movenear;
                     }
                     else if(RTB_mode == RTBmode::Move){                                       
                         RTB_mode = RTBmode::Search; 
@@ -434,15 +432,12 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
                
         case mainFSMmode::Landing:    
             switch (Land_Mode){           
-                case LandMode::NearHome:                                                        
-                    pose_target_.yaw =   M_PI;      
-                     if( fabs(current_yaw -M_PI) < 0.2){
-                        Land_Mode = LandMode::MovetoHome;
-                        }                   
+                case LandMode::NearHome:                                    
+                    Land_Mode = LandMode::MovetoHome;
                 break; 
 
                 case LandMode::MovetoHome:                                    
-                    Land_Mode = LandMode::Landing;                    
+                    Land_Mode = LandMode::Landing;
                 break;                     
 
                 case LandMode::Landing:                                    
@@ -451,7 +446,7 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
 
                 default:
                     mainFSM_mode = mainFSMmode::Landing;
-                    Land_Mode =  LandMode::NearHome;                    
+                    Land_Mode =  LandMode::Landing;
                 break;     
             }                         
         break;
@@ -471,14 +466,14 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
                 }
                
                 
-                case RTBmode::Search:                
+                case RTBmode::Search:                      
                      current_min_idx = get_safe_wp_idx();                     
                     if( current_min_idx != prev_min_idx){
                         RTB_mode = RTBmode::YawAglign;                       
                     }else{
                         if(  sqrt(pow(current_x-wp_x[current_min_idx],2)+ pow(current_y-wp_y[current_min_idx],2))< 0.2){    
                         RTB_mode = RTBmode::MoveNear;
-                        }else{
+                        else{
                         RTB_mode = RTBmode::Move;    
                         }
                     }
@@ -499,45 +494,33 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
                 case RTBmode::Move:   
                         pose_target_.position.x =   wp_x[current_min_idx];                             
                         pose_target_.position.y =   wp_y[current_min_idx];     
-                        if(  sqrt(pow(current_x-wp_x[current_min_idx],2)+ pow(current_y-wp_y[current_min_idx],2))< 0.2){    
-                            if(current_min_idx < 1){
-                                    current_min_idx =1;
-                                    mainFSM_mode = mainFSMmode::Landing;  
-                                    Land_Mode = LandMode::NearHome;  
-                                }
-                                // x_check = wp_x[current_min_idx-1];  y_check = wp_y[current_min_idx-1];                               
-                                // x_dc = x_check - current_x;   y_dc = y_check - current_y;    
-                                // target_yaw = atan2(y_dc, x_dc);   
-                                // angle_wrap(target_yaw);
-                                // pose_target_.yaw = target_yaw;
+                        // if(  sqrt(pow(current_x-wp_x[current_min_idx],2)+ pow(current_y-wp_y[current_min_idx],2))< 0.2){    
+                            // if(current_min_idx < 1){
+                            //         current_min_idx =1;
+                            //         mainFSM_mode = mainFSMmode::Landing;  
+                            //     }
+                            //     x_check = wp_x[current_min_idx-1];  y_check = wp_y[current_min_idx-1];                               
+                            //     x_dc = x_check - current_x;   y_dc = y_check - current_y;    
+                            //     target_yaw = atan2(y_dc, x_dc);   
+                            //     angle_wrap(target_yaw);
+                            //     pose_target_.yaw = target_yaw;
                                 
-                                RTB_mode = RTBmode::Search;     
+                            //     RTB_mode = RTBmode::Search;     
                                                            
-                        }else{                                  
+                        // }else{
                                 x_check = wp_x[current_min_idx];  y_check = wp_y[current_min_idx];                               
                                 x_dc = x_check - current_x;   y_dc = y_check - current_y;    
                                 target_yaw = atan2(y_dc, x_dc);   
                                 angle_wrap(target_yaw);
                                 pose_target_.yaw = target_yaw;
-                        }                                  
-
+                        // }                                                   
                 break;   
 
-                        
-                case RTBmode::Init_yaw:                  
-                    pose_target_.yaw = target_yaw;                    
-                    if( fabs(current_yaw -target_yaw) < 0.1){
-                        RTB_mode = RTBmode::Search;
-                    }
-                break;   
-
-                
                 case RTBmode::MoveNear:{
                         // if(  sqrt(pow(current_x-wp_x[current_min_idx],2)+ pow(current_y-wp_y[current_min_idx],2))< 0.2){    
                             if(current_min_idx < 1){
                                     current_min_idx =1;
                                     mainFSM_mode = mainFSMmode::Landing;  
-                                    Land_Mode = LandMode::NearHome;
                                 }
                                 x_check = wp_x[current_min_idx-1];  y_check = wp_y[current_min_idx-1];                               
                                 x_dc = x_check - current_x;   y_dc = y_check - current_y;    
@@ -549,8 +532,15 @@ void hmclFSM::mainFSMCallback(const ros::TimerEvent &event){
                                     RTB_mode = RTBmode::Search;     
                                 }                                
                                                            
-                break;
-                }         
+                        // }
+                }
+                        
+                case RTBmode::Init_yaw:                  
+                    pose_target_.yaw = target_yaw;                    
+                    if( fabs(current_yaw -target_yaw) < 0.1){
+                        RTB_mode = RTBmode::Search;
+                    }
+                break;            
 
                 default:
                     ROS_INFO("RTB default flag on..something wrong");
@@ -857,20 +847,19 @@ if(final_avoidance_activate){
             pose_target_.yaw =  tmp_target_.yaw;
             pose_target_.yaw_rate = tmp_target_.yaw_rate;    
         }else{
-            if(!rtb){
-                double angle_increment_tmp_ =0.25;
-                if(final_avoidance_activate){
-                    angle_increment_tmp_ +=0.05;
-                }
-                if( angle_to_avoidance < lidar_data.angle_min){
-                    pose_target_.yaw = current_yaw+angle_increment_tmp_;
-                }else if(angle_to_avoidance > lidar_data.angle_max){
-                    pose_target_.yaw = current_yaw-angle_increment_tmp_;
-                }else{
-                    pose_target_.yaw =  current_yaw;
-                }
-                pose_target_.yaw_rate = 0.18;
-            }                    
+            
+            double angle_increment_tmp_ =0.25;
+            if(final_avoidance_activate){
+                angle_increment_tmp_ +=0.05;
+            }
+            if( angle_to_avoidance < lidar_data.angle_min){
+                pose_target_.yaw = current_yaw+angle_increment_tmp_;
+            }else if(angle_to_avoidance > lidar_data.angle_max){
+                pose_target_.yaw = current_yaw-angle_increment_tmp_;
+            }else{
+                 pose_target_.yaw =  current_yaw;
+            }
+            pose_target_.yaw_rate = 0.18;
         }
           
         local_trj_enable = false;   
@@ -937,7 +926,7 @@ void hmclFSM::cmdloopCallback(const ros::TimerEvent &event) {
     if(landing){
         pose_target_.position.x = current_pose.position.x; 
         pose_target_.position.y = current_pose.position.y; 
-        pose_target_.position.z = current_pose.position.z-0.5;   
+        pose_target_.position.z = current_pose.position.z-0.7;   
         position_target_pub.publish(pose_target_);        
         return;
     }
@@ -1064,7 +1053,7 @@ void hmclFSM::check_rtb_init(){
         }        
     }
      ////////////  If bettery is not enough 
-    if(current_battery < battery_thres){  
+    if(current_battery < 0.3){
             rtb = true;
     }
    
