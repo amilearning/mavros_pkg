@@ -19,7 +19,11 @@
   <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0.0 0 0.0 0.0 0.0 0.0 map odom 1"/>
   <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link_virtual" args="0.0 0.0 0.1 0.0 0.0 0.0 base_link laser 1"/>
   <node pkg="tf" type="static_transform_publisher" name="base_link_to_camera_link_virtual" args="0.147 0 -0.068 0.0 0.0 0.0 base_link camera_link_virtual 1"/>
+  <!-- TASK1 -->
   <node pkg="tf" type="static_transform_publisher" name="base_link_to_camera_link" args="0.0 0 0.0 -1.570975 +1.570975 -1.570975 camera_link_virtual camera_link 1"/> 
+
+  <!-- TASK2 -->
+  <!-- <node pkg="tf" type="static_transform_publisher" name="base_link_to_camera_link" args="0.0 0 0.0 -1.570975 0.0 -1.570975 camera_link_virtual camera_link 1"/>  -->
   
   
   

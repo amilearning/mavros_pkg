@@ -178,7 +178,7 @@ private:
 
     
     
-    
+    int emergency_landing_count;
     ros::Timer fsm_timer_;
     ros::Timer cmdloop_timer_;
     ros::Timer waypoint_iter_timer_; 
@@ -189,7 +189,8 @@ private:
     sensor_fusion_comm::InitScale ekf_init_param;
     bool cali_done;
     bool re_init;
-    
+    ros::Publisher rtb_pub;
+    int stuck_count;
     int control_count_tmp;
     int init_count;
     ros::Publisher rpyt_pub;
@@ -216,18 +217,21 @@ private:
     bool local_trj_switch_, local_target_send_;
     bool local_trj_enable;
     bool local_path_received;
-    
+    ros::Time last_request;
     mavros_msgs::SetMode offb_set_mode;   
     mavros_msgs::CommandBool arm_cmd; 
     mavros_msgs::CommandLong px4_reboot_cmd;
     mavros_msgs::CommandLong px4_kill_cmd;
     mavros_msgs::CommandLong px4_landinggear_cmd;
-    
+    mavros_msgs::State current_state;    
     double current_battery;    
     mavros_msgs::PositionTarget pose_target_; 
     mavros_msgs::PositionTarget tmp_target_;
     bool pose_cmd_enable;
     geometry_msgs::Pose current_pose,pose_at_request;
+    geometry_msgs::Pose prev_pose_for_check;
+    ros::Duration time_diff;
+    ros::Time prev_update_time;
     geometry_msgs::Pose target_pose;
     geometry_msgs::Pose global_planner_target_pose;
     geometry_msgs::Pose previous_pose;
@@ -256,7 +260,7 @@ private:
     dynamic_reconfigure::Server<hmcl_fsm::dyn_paramsConfig>::CallbackType f;
     
     
-    
+    int avoid_perpendicualar_factor;
 
     int waypoints_itr;
     bool send_waypoint;
@@ -290,7 +294,7 @@ private:
     bool wall_r_follow, wall_l_follow;
     geometry_msgs::PoseStamped avoidance_vector_display;
     double battery_thres;
-    
+    bool if_stuck;
     //////////////////////Landing //////////////////////////
 
 
@@ -343,7 +347,7 @@ private:
     //mainFSmode related functions
     void init_takeoff();
     bool init_cali();
-     
+    bool check_if_stuck();
     void angle_wrap(double &angle);
     // utility functions 
     double get_distance(geometry_msgs::Pose &p1,geometry_msgs::Pose &p2);

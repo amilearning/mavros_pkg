@@ -1,22 +1,22 @@
 fsm:
-  init_takeoff: 0.7
+  init_takeoff: 1.0
   lidar_avoidance_distance: 1.1
   global_pose_x_min: -30
   global_pose_y_min: -30
   global_pose_z_min: 0.4
   global_pose_x_max: 30.8
   global_pose_y_max: 30.8
-  global_pose_z_max: 1.0
+  global_pose_z_max: 2.2
 
-FSM_mode: 0 
+FSM_mode: 1
 thrust_scale: 0.035
 manual_trj_switch: false
 target_x: 0.0
 target_y: 0.0
-target_z: 0.7
+target_z: 1.2
 target_yaw: 0.0 #1.52
 verbos: true
-total_run_distance: 40
-safe_distance: 0.75
+total_run_distance: 10000  
+safe_distance: 1.2
 D_sp: 0.2
-battery_thres: 0.2
+battery_thres: 0.0

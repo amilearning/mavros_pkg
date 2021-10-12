@@ -6,7 +6,7 @@
   
    <arg name="map_follower_config_file" default="$(find map_follower)/config/map_follower.yaml"/>
 
-  <node pkg="map_follower" type="map_follower" name="map_follower" output="log">
+  <node pkg="map_follower" type="map_follower" name="map_follower" output="screen">
     <!-- <remap from="/mavros/vision_pose/pose" to="vins/vision_pose/pose"/>   -->
     <remap from="/laser/scan" to="/scan"/>  
       <!-- <remap from="ground_truth_pose" to="/mavros/local_position/odom"/>   -->

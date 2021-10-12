@@ -52,6 +52,7 @@
 #include <map_follower/dyn_paramsConfig.h>
 
 
+
 enum struct FWmode {front_clear = 0,  front_obst = 1, narrow_follow = 2, front_follow = 3};    
 
 inline const char* stateToString(FWmode v)
@@ -65,8 +66,6 @@ inline const char* stateToString(FWmode v)
         default:      return "[Unknown LandMode]";
     }
 }
-
-
 
 class mapfollower{
 
@@ -91,11 +90,8 @@ class mapfollower{
     geometry_msgs::TransformStamped transformStamped_tmp;
     tf2_ros::TransformBroadcaster tf_broadcaster_;
 
-    double R2; 
-    double R1; 
-    double DT;  
-    double F1;
     FWmode follow_mode_;
+    
     ros::Timer cmdloop_timer_;
     
     ros::Timer lidar_timer_;
@@ -125,7 +121,9 @@ class mapfollower{
     bool armed;
     bool offboarded;
     bool odom_received;
-   
+     double R2; 
+    double R1; 
+    double DT;   
 
      int localsearch_count;
     
@@ -153,32 +151,6 @@ class mapfollower{
     double error_l, angle_l, prev_error_l, integral_l;
     double delta_yaw_l, forward_speed_l;
 
-    int idx_90;
-    int idx_45;
-    int idx_15;
-    int idx_10;
-    int idx_5 ;
-    int idx_0 ;
-    int idx5  ;
-    int idx10;
-    int idx15 ;
-    int idx90 ;
-    int idx_85;
-    int idx_60;
-    int idx_80;
-    
-
-    // int idx_90;
-    // int idx_60; 
-    // int idx_25;    
-    // int idx25; 
-    // int idx60;
-    // int idx90; 
-    // int idx_0; 
-    // int idx_80; 
-    // int idx_45;
-    bool lidar_recieved;
-
     double lidar_min_threshold;
     double init_takeoff_;
     double global_pose_x_min, global_pose_x_max, global_pose_y_min, global_pose_y_max, global_pose_z_min, global_pose_z_max;
@@ -201,7 +173,7 @@ class mapfollower{
     void posecmdloopCallback(const ros::TimerEvent &event);  
     void lidarTimeCallback(const ros::TimerEvent &event);  
     
-        
+    
     void odom_cb(const nav_msgs::OdometryConstPtr& msg);
    
     void dyn_callback(const map_follower::dyn_paramsConfig &config, uint32_t level);

@@ -63,7 +63,7 @@ void mapfollower::posecmdloopCallback(const ros::TimerEvent &event) {
     
     pose_target_.position.x = current_pose.position.x + speed_scale*forward_speed*cos(current_yaw);                             
     pose_target_.position.y = current_pose.position.y + speed_scale*forward_speed*sin(current_yaw);    
-    pose_target_.position.z = 1.0;                                 
+    pose_target_.position.z = 1.2;                                 
     pose_target_.yaw = current_yaw + delta_yaw*angle_scale;       
     
     position_target_pub.publish(pose_target_);    
@@ -115,11 +115,11 @@ double mapfollower::speed_mapping_from_angle(double angle) {
     }else if(fabs(angle) >= 0.2 && fabs(angle) < 0.4 ){
                 return 0.3;
     }else if(fabs(angle) >= 0.4 && fabs(angle) < 0.5 ){
-                return 0.2;
+                return 0.3;
     }else if(fabs(angle) >= 0.5 && fabs(angle) < max_angle ){
-                return 0.05;
+                return 0.2;
     }    
-    return 0.1;  
+    return 0.2;  
 }
 
 
@@ -162,7 +162,6 @@ void mapfollower::lidarTimeCallback(const ros::TimerEvent &event) {
     
 }
 
-
 int mapfollower::find_indx_from_anglx(double angle_in_degree){
     double input_angle;
     // input_angle = angle_in_radian;
@@ -189,7 +188,8 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
         lidar_data = *msg; 
         
         if(!lidar_recieved){
-              idx_90 = 45*4;
+                
+             idx_90 = 45*4;
              idx_85 = idx_90 + 5*4; 
              idx_80 = idx_90 + 10*4; 
              idx_60 = idx_90 + 30*4; 
@@ -202,7 +202,8 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
              idx5   = idx_0 + 5*4; 
              idx15  = idx_0 + 15*4; 
              idx90  = idx_0 + 90*4; 
-                       
+             
+             
                   
                  lidar_recieved = true;
                  return;
@@ -225,9 +226,9 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
     }
 
     ////////////////////////
-    int tmp_min_idx_= idx_60;
-    double tmp_min_= lidar_data.ranges[idx_60];
-    for(int i= idx_60; i< idx_0; i++){
+    int tmp_min_idx_= idx_45;
+    double tmp_min_= lidar_data.ranges[idx_45];
+    for(int i= idx_45; i< idx_0; i++){
         if(lidar_data.ranges[i] > lidar_data.range_max || lidar_data.ranges[i] < lidar_data.range_min){
             continue;
         }
@@ -246,22 +247,40 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
     if(tmp_min > R2 && tmp_min_ > F1){
         follow_mode_ = FWmode::front_clear;
         
-    }else{  
-        bool block = false;
-        for(int i = idx_45; i < idx_0; i++){
-               if(lidar_data.ranges[i] > lidar_data.range_max || lidar_data.ranges[i] < lidar_data.range_min){
+    }else{
+            bool block = false;
+            bool block_dt = false;
+            for(int i = idx_60; i < idx_0; i++){
+                if(lidar_data.ranges[i] > lidar_data.range_max || lidar_data.ranges[i] < lidar_data.range_min){
             continue;}
                 if( lidar_data.ranges[i] < R1){
-                block = true;                
+                block = true;              
                 }
             } 
-             if(block){
-                 follow_mode_ = FWmode::front_follow;                
-            }else{
-                follow_mode_ = FWmode::narrow_follow;      
-            }   
+            for(int i = idx_0; i < idx90; i++){
+                if(lidar_data.ranges[i] > lidar_data.range_max || lidar_data.ranges[i] < lidar_data.range_min){
+            continue;}
+                if( lidar_data.ranges[i] < 1.3){
+                block_dt = true;              
+                }
+            }
 
-                  
+            
+            if(block && block_dt){
+                 follow_mode_ = FWmode::front_follow;     
+            }else if(block && !block_dt){
+                 follow_mode_ = FWmode::front_follow;     
+            }else if(!block && block_dt){
+                 follow_mode_ = FWmode::narrow_follow;     
+            }else if(!block && !block_dt){
+                 follow_mode_ = FWmode::narrow_follow;     
+            }
+
+            // if(block || block_dt){
+            //     follow_mode_ = FWmode::front_follow;                
+            // }else{
+            //     follow_mode_ = FWmode::narrow_follow;      
+            // }        
             
     }
     ROS_INFO("mainFSM_mode = %s", stateToString(follow_mode_));    
@@ -272,7 +291,7 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
             for(int i = idx_90; i < idx_0; i++){
                 if(lidar_data.ranges[i] > lidar_data.range_max || lidar_data.ranges[i] < lidar_data.range_min){
             continue;
-                 }
+        }
                 if( tmp_min > fabs(lidar_data.ranges[i]-R1)){
                     tmp_min = fabs(lidar_data.ranges[i]-R1);
                     tmp_min_idx = i;   
@@ -291,16 +310,16 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
                 }
             }
                 if(right_max_val > desired_distance*1.6){
-            tmp_min_idx = idx_90;
+            tmp_min_idx = idx_85;
             ROS_INFO("Huge Free space ");
                 }
         break;
         }       
 
         case FWmode::narrow_follow:{                                    
-            tmp_min = fabs(lidar_data.ranges[idx_90]-R1);
-            tmp_min_idx = idx_90;
-            for(int i = idx_90; i < idx_60; i++){
+            tmp_min = fabs(lidar_data.ranges[idx_80]-R1);
+            tmp_min_idx = idx_80;
+            for(int i = idx_80; i < idx_45; i++){
                 if(lidar_data.ranges[i] > lidar_data.range_max || lidar_data.ranges[i] < lidar_data.range_min){
             continue;
         }
@@ -310,7 +329,21 @@ void mapfollower::lidarCallback(const sensor_msgs::LaserScanConstPtr &msg){
                 }
             }
 
-            
+            double right_max_val = lidar_data.range_min;    
+            int right_max_idx = idx_90;
+            for(int i=idx_90;i<idx_60; i++){
+                if(lidar_data.ranges[i] > lidar_data.range_max || lidar_data.ranges[i] < lidar_data.range_min){
+            continue;
+              }
+                if( right_max_val < lidar_data.ranges[i]){
+                    right_max_val = lidar_data.ranges[i];
+                    right_max_idx = i;
+                }
+            }
+            if(right_max_val > desired_distance*1.8){
+            tmp_min_idx = idx_85;
+            ROS_INFO("narrow Free space ");
+                }
 
         break;
         }
