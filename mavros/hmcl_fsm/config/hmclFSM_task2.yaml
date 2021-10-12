@@ -13,7 +13,7 @@ fsm:
   lidar_avoidance_move_distance: 0.75
   lidar_final_avoidance_distance: 0.85
 
-FSM_mode: 1
+FSM_mode: 0
 thrust_scale: 0.035
 manual_trj_switch: false
 target_x: 0.0
@@ -21,7 +21,7 @@ target_y: 0.0
 target_z: 1.2
 target_yaw: 0.0 #1.52
 verbos: true
-total_run_distance: 10000  
+total_run_distance: 65  
 safe_distance: 1.2
 D_sp: 0.2
 battery_thres: 0.0

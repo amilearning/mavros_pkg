@@ -426,6 +426,10 @@ void mapfollower::load_FSM_Params(std::string group){
     nh_private_.getParam(group+"/global_pose_x_max",global_pose_x_max);
     nh_private_.getParam(group+"/global_pose_y_max",global_pose_y_max);
     nh_private_.getParam(group+"/global_pose_z_max",global_pose_z_max);
+
+
+
+
 }
 
 

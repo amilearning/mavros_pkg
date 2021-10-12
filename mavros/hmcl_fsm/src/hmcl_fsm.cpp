@@ -26,6 +26,7 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     emergency_landing_count = 0;
     global_goal_dir=0.0;
     prev_global_goal_dir=0.0;
+    vector_avoidance_scale = 0.0;
 
     // d0 = 3.0;
     // k0 = 0.004;
@@ -250,9 +251,7 @@ void hmclFSM::load_FSM_Params(std::string group){
     nh_private_.getParam("D_sp",D_sp); 
     nh_private_.getParam("battery_thres",battery_thres); 
     
-     
-    // nh_private_.getParam("d0",d0);
-    // nh_private_.getParam("k0",k0);    
+       
     nh_private_.getParam("manual_trj_switch",manual_trj_switch_);
     nh_private_.getParam(group+"/init_takeoff",init_takeoff_);
     nh_private_.getParam(group+"/lidar_avoidance_distance",lidar_avoidance_distance_);
@@ -262,7 +261,17 @@ void hmclFSM::load_FSM_Params(std::string group){
     nh_private_.getParam(group+"/global_pose_x_max",global_pose_x_max);
     nh_private_.getParam(group+"/global_pose_y_max",global_pose_y_max);
     nh_private_.getParam(group+"/global_pose_z_max",global_pose_z_max);
+    nh_private_.getParam(group+"/d0",d0);
+    nh_private_.getParam(group+"/k0",k0);
+    nh_private_.getParam(group+"/lidar_min_threshold",lidar_min_threshold);    
+    nh_private_.getParam(group+"/lidar_avoidance_move_distance",lidar_avoidance_move_distance_);
+    nh_private_.getParam(group+"/lidar_final_avoidance_distance",lidar_final_avoidance_distance);
+    
+
 }
+
+   
+        
 
 
 void hmclFSM::goaldirectionCallback(const std_msgs::Float32ConstPtr &msg){
@@ -786,19 +795,19 @@ void hmclFSM::poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg
 
 
 void hmclFSM::dyn_callback(const hmcl_fsm::dyn_paramsConfig &config, uint32_t level) {              
-            
-            d0 = config.d0;
-            k0 = config.k0;
-            lidar_min_threshold = config.lidar_min_threshold;
-            lidar_avoidance_distance_ = config.lidar_avoidance_distance;
-            lidar_avoidance_move_distance_ = config.lidar_avoidance_move_distance;
-            lidar_final_avoidance_distance = config.lidar_final_avoidance_distance;
-            manual_trj_switch_ = config.manual_trj_switch;
-            target_x=config.target_x;
-            target_y=config.target_y;
-            target_z=config.target_z;
-            target_yaw = config.target_yaw;            
-            vector_avoidance_scale = config.vector_avoidance_scale;
+            return;
+            // d0 = config.d0;
+            // k0 = config.k0;
+            // lidar_min_threshold = config.lidar_min_threshold;
+            // lidar_avoidance_distance_ = config.lidar_avoidance_distance;
+            // lidar_avoidance_move_distance_ = config.lidar_avoidance_move_distance;
+            // lidar_final_avoidance_distance = config.lidar_final_avoidance_distance;
+            // manual_trj_switch_ = config.manual_trj_switch;
+            // target_x=config.target_x;
+            // target_y=config.target_y;
+            // target_z=config.target_z;
+            // // target_yaw = config.target_yaw;            
+            // // vector_avoidance_scale = config.vector_avoidance_scale;
                     
 }
 
