@@ -7,6 +7,7 @@
 #include <tf/transform_datatypes.h>
 #include <tf/transform_listener.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Float32.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -67,7 +68,19 @@ enum struct mainFSMmode {Init = 0, Exploration = 1, Avoidance = 2, Landing = 3, 
 enum struct ExploreMode {LocalSearching = 0, GlobalSearching = 1};        
 enum struct LandMode {NearHome = 0, MovetoHome = 1, Landing = 2};    
 enum struct RTBmode {Init = 0, Search = 1, YawAglign = 2, Move = 3, Init_yaw = 4, MoveNear =5};        
+enum struct LocalPlanMode {Planning = 0, YawMatching = 1, WaypointRequest = 2};        
 
+
+inline const char* stateToString(LocalPlanMode v)
+{
+    switch (v)
+    {
+        case LocalPlanMode::Planning:   return "Planning";
+        case LocalPlanMode::YawMatching:   return "YawMatching";
+        case LocalPlanMode::WaypointRequest: return "WaypointRequest";              
+        default:      return "[Unknown mainFSMmode]";
+    }
+}
 
 
 inline const char* stateToString(RTBmode v)
@@ -155,7 +168,7 @@ private:
     ros::Subscriber local_path_trigger_sub;
     ros::Subscriber mav_vel_sub;
     ros::Subscriber ndt_fused_pose_sub;
-    
+    ros::Subscriber global_direction_sub;
 
     ros::Subscriber points_sub;
 
@@ -276,6 +289,7 @@ private:
     //  mainFSMmode previous_mode;  
      RTBmode    RTB_mode;
      ExploreMode Explore_Mode;     
+     LocalPlanMode LocalPlan_Mode;
      
      LandMode Land_Mode;
      int localsearch_count;
@@ -323,6 +337,8 @@ private:
     double D_sw= 1;                      // Distance threshold for STORE_WP
     double D_sp= 0.2;                    // Distance threshold for judge sepoint arrival
 
+    double global_goal_dir, prev_global_goal_dir;
+
     void check_rtb_init();
     void STORE_WP();
     bool CHECK_CLEARANCE_AVOIDANCE(int lidar_idx_c, double expected);
@@ -364,6 +380,8 @@ private:
     void poseCmdCallback(const quadrotor_msgs::PositionCommandConstPtr &msg);
 
     void localTrajTrigCallback(const std_msgs::EmptyConstPtr &msg);
+
+    void goaldirectionCallback(const std_msgs::Float32ConstPtr &msg);
    
 
     // sensors callback

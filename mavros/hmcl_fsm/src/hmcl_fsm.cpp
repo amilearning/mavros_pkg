@@ -24,6 +24,8 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     init_count =0;
     wall_l_follow = false;
     emergency_landing_count = 0;
+    global_goal_dir=0.0;
+    prev_global_goal_dir=0.0;
 
     // d0 = 3.0;
     // k0 = 0.004;
@@ -52,7 +54,7 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
         fsm_timer_ = fsm_nh_.createTimer(ros::Duration(0.02), &hmclFSM::localFSMCallback,this); 
         local_path_trigger_sub = fsm_nh_.subscribe<std_msgs::Empty>("/planning/new",1,&hmclFSM::localTrajTrigCallback,this);
         local_avoidance_switch_pub = fsm_nh_.advertise<std_msgs::Bool>("/local_avoidance_switch",1);
-        
+        global_direction_sub = nh_.subscribe<std_msgs::Float32>("goal_direction",1,&hmclFSM::goaldirectionCallback,this);
         pos_cmd_sub = nh_.subscribe<quadrotor_msgs::PositionCommand>("/planning/pos_cmd", 10, &hmclFSM::poseCmdCallback,this);    
     }
     
@@ -66,6 +68,7 @@ hmclFSM::hmclFSM(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,co
     // Define service Clients 
     ekf_reinit_client = nh_.serviceClient<sensor_fusion_comm::InitScale>("/msf_viconpos_sensor/pose_sensor/initialize_msf_scale");     
     arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
+    
     px4_cmd_client = nh_.serviceClient<mavros_msgs::CommandLong>("/mavros/cmd/command");
 
     set_mode_client = nh_.serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");
@@ -262,6 +265,10 @@ void hmclFSM::load_FSM_Params(std::string group){
 }
 
 
+void hmclFSM::goaldirectionCallback(const std_msgs::Float32ConstPtr &msg){
+    global_goal_dir =  msg->data;
+}
+
 
 void hmclFSM::init_takeoff(){
     if(!odom_received){
@@ -321,41 +328,49 @@ void hmclFSM::localFSMCallback(const ros::TimerEvent &event){
             init_takeoff();
                 if(init_count > 50){                    
                     mainFSM_mode = mainFSMmode::Exploration;     
-                    Explore_Mode = ExploreMode::GlobalSearching;   
+                    LocalPlan_Mode = LocalPlanMode::WaypointRequest;
+                     
                 }
                 if (fabs(current_pose.position.z - init_takeoff_) < 0.1){     
                     init_count ++;                      
                 }else{
                   mainFSM_mode = mainFSMmode::Init;  
                 }
+               
                 
         break;
         
         case mainFSMmode::Exploration:  
-            if(verbos){ROS_INFO("Main = %s, Sub = %s",stateToString(mainFSM_mode),stateToString(Explore_Mode));}                      
-            switch (Explore_Mode){                               
-                case ExploreMode::LocalSearching:{                           
+            if(verbos){ROS_INFO("Main = %s, Sub = %s",stateToString(mainFSM_mode),stateToString(LocalPlan_Mode));}                      
+            switch (LocalPlan_Mode){                               
+                case LocalPlanMode::Planning:{                           
                         // Send local target goal to local planner                                    
                     if(local_path_received){
                         std_msgs::Bool tmp_data_;
                         tmp_data_.data = false;
                         local_avoidance_switch_pub.publish(tmp_data_);
-                        local_trj_enable = true;
-                        if(get_distance(pose_at_request,current_pose) < 0.1){                        
-                           goal_request_count++;
-                            if(goal_request_count > 10){
-                                Explore_Mode = ExploreMode::GlobalSearching; 
-                            }
-                        }    
+                        local_trj_enable = true;                        
                         local_path_received = false;                   
-                    }                                         
-                    if(get_distance(global_planner_target_pose,current_pose) < 0.2){                                                
-                        Explore_Mode = ExploreMode::GlobalSearching; // Return to local exploration planner                                  
-                    }         
+                    }  
+                    if(global_goal_dir != prev_global_goal_dir){
+                        prev_global_goal_dir =global_goal_dir; 
+                        LocalPlan_Mode = LocalPlanMode::YawMatching; 
+                        }                        
                 break;  
                 }
                 
-                case ExploreMode::GlobalSearching:{                      
+                case LocalPlanMode::YawMatching:{                      
+                        local_trj_enable = false;    
+                        pose_target_.yaw =   global_goal_dir; 
+                        double tmp_target_yaw =global_goal_dir;      
+                        angle_wrap(tmp_target_yaw);
+                        if( fabs(current_yaw -tmp_target_yaw) < 0.1){
+                        LocalPlan_Mode = LocalPlanMode::WaypointRequest;
+                        }                                      
+                break;  
+                }
+
+                case LocalPlanMode::WaypointRequest:{                      
                         goal_request_count = 0;                             
                         pose_at_request = current_pose;
                         local_trj_enable = false;                                   
@@ -366,14 +381,13 @@ void hmclFSM::localFSMCallback(const ros::TimerEvent &event){
                         local_goal_tmp.header.frame_id = "world";                        
                         global_planner_target_pose.position.z = init_takeoff_;
                         local_goal_tmp.pose = global_planner_target_pose;                            
-                        local_goal_pub.publish(local_goal_tmp);
-                        // local_target_send_ = false;                                
+                        local_goal_pub.publish(local_goal_tmp);                                                       
                         Explore_Mode = ExploreMode::LocalSearching;                         
                 break;  
                 }
 
                 default:{
-                 if(verbos){   ROS_INFO("ExploreMode default flag on..something wrong");}
+                 if(verbos){   ROS_INFO("LocalPlanMode default flag on..something wrong");}
                 break; 
                 }
             }               
@@ -381,19 +395,16 @@ void hmclFSM::localFSMCallback(const ros::TimerEvent &event){
         break;
 
         case mainFSMmode::Avoidance:                        
-            mainFSM_mode = mainFSMmode::Exploration;
-            Explore_Mode = ExploreMode::GlobalSearching;
-                                 
+            mainFSM_mode = mainFSMmode::Exploration;                
+            LocalPlan_Mode = LocalPlanMode::WaypointRequest;                                 
         break;
         
         case mainFSMmode::Landing:
-            mainFSM_mode = mainFSMmode::Exploration;
-            Explore_Mode = ExploreMode::GlobalSearching;                                  
+            mainFSM_mode = mainFSMmode::Exploration;            
         break;
        
         case mainFSMmode::RTB:
-            mainFSM_mode = mainFSMmode::Exploration;
-            Explore_Mode = ExploreMode::GlobalSearching;
+            mainFSM_mode = mainFSMmode::Exploration;           
         break;
 
         default:{
@@ -1049,11 +1060,19 @@ void hmclFSM::cmdloopCallback(const ros::TimerEvent &event) {
         pose_target_.position.y = current_pose.position.y; 
         if(current_pose.position.z > 0.3){
                 pose_target_.position.z = current_pose.position.z-0.5;             
-        }else{
+        }else{  
+            arm_cmd.request.value = false;                     
+            if(current_state.armed)
+            {   if( arming_client.call(arm_cmd))
+                {
+                    if(verbos){ROS_INFO("Vehicle disarmed");}
+                    armed = false;                            
+                }                      
+                    
+            }
             pose_target_.position.z = current_pose.position.z-2.0; 
         }
-        
-        
+                
         position_target_pub.publish(pose_target_);        
         return;
     }
